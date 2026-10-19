@@ -1,0 +1,6 @@
+{
+  "name": "কওমি কর্মসংস্থান বাংলাদেশ",
+  "description": "কওমি কর্মসংস্থান বাংলাদেশ",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
