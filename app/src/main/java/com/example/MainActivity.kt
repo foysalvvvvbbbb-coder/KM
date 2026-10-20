@@ -32,6 +32,7 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
@@ -77,43 +78,188 @@ class MainActivity : ComponentActivity() {
 @Composable
 fun AppNavigation() {
     val navController = rememberNavController()
+    val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
+    val coroutineScope = rememberCoroutineScope()
+    val auth = remember { FirebaseAuth.getInstance() }
+    val currentUser = auth.currentUser
+
     val items = listOf("হোম" to Icons.Default.Home, "খেদমত" to Icons.Default.Work, "আবেদন" to Icons.AutoMirrored.Filled.List, "প্রোফাইল" to Icons.Default.Person)
     val routes = listOf("home", "khedmot", "abedon", "profile")
     val currentRoute = navController.currentBackStackEntryAsState().value?.destination?.route
 
-    Scaffold(
-        bottomBar = {
-            if (currentRoute in routes) {
-                NavigationBar(containerColor = Color(0xFF1E1E1E), tonalElevation = 8.dp) {
-                    items.forEachIndexed { index, (label, icon) ->
-                        NavigationBarItem(
-                            selected = currentRoute == routes[index],
-                            onClick = { navController.navigate(routes[index]) { popUpTo("home") } },
-                            icon = { Icon(icon, contentDescription = label) },
-                            label = { Text(label) },
-                            colors = NavigationBarItemDefaults.colors(
-                                selectedIconColor = Color(0xFFC9A44C),
-                                selectedTextColor = Color(0xFFC9A44C),
-                                indicatorColor = Color(0xFF333333)
-                            )
+    ModalNavigationDrawer(
+        drawerState = drawerState,
+        gesturesEnabled = currentRoute in routes,
+        drawerContent = {
+            ModalDrawerSheet(
+                drawerContainerColor = WarmOffWhite,
+                modifier = Modifier.widthIn(max = 300.dp)
+            ) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(
+                            Brush.verticalGradient(listOf(DeepEmerald, ElegantGreen))
+                        )
+                        .padding(20.dp)
+                ) {
+                    Column {
+                        Icon(
+                            imageVector = Icons.Default.AccountCircle,
+                            contentDescription = "User Avatar",
+                            tint = MutedGold,
+                            modifier = Modifier.size(52.dp)
+                        )
+                        Spacer(Modifier.height(10.dp))
+                        Text(
+                            text = "কওমি কর্মসংস্থান বাংলাদেশ",
+                            color = Color.White,
+                            fontSize = 17.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Spacer(Modifier.height(2.dp))
+                        Text(
+                            text = currentUser?.displayName?.takeIf { it.isNotBlank() }
+                                ?: currentUser?.email
+                                ?: "খেদমতের বিশ্বস্ত প্ল্যাটফর্ম",
+                            color = MutedGold,
+                            fontSize = 13.sp
                         )
                     }
                 }
+
+                Spacer(Modifier.height(12.dp))
+
+                NavigationDrawerItem(
+                    icon = { Icon(Icons.Default.Home, contentDescription = "হোম", tint = ElegantGreen) },
+                    label = { Text("হোম", fontWeight = FontWeight.Medium) },
+                    selected = currentRoute == "home",
+                    onClick = {
+                        coroutineScope.launch { drawerState.close() }
+                        if (currentRoute != "home") {
+                            navController.navigate("home") { popUpTo("home") { inclusive = false } }
+                        }
+                    },
+                    modifier = Modifier.padding(NavigationDrawerItemDefaults.ItemPadding)
+                )
+
+                NavigationDrawerItem(
+                    icon = { Icon(Icons.Default.Work, contentDescription = "খেদমত", tint = ElegantGreen) },
+                    label = { Text("খেদমত", fontWeight = FontWeight.Medium) },
+                    selected = currentRoute == "khedmot",
+                    onClick = {
+                        coroutineScope.launch { drawerState.close() }
+                        navController.navigate("khedmot") { popUpTo("home") }
+                    },
+                    modifier = Modifier.padding(NavigationDrawerItemDefaults.ItemPadding)
+                )
+
+                NavigationDrawerItem(
+                    icon = { Icon(Icons.Default.Search, contentDescription = "খেদমত খুঁজুন", tint = ElegantGreen) },
+                    label = { Text("খেদমত খুঁজুন", fontWeight = FontWeight.Medium) },
+                    selected = currentRoute == "search_khedmot",
+                    onClick = {
+                        coroutineScope.launch { drawerState.close() }
+                        navController.navigate("search_khedmot") { popUpTo("home") }
+                    },
+                    modifier = Modifier.padding(NavigationDrawerItemDefaults.ItemPadding)
+                )
+
+                NavigationDrawerItem(
+                    icon = { Icon(Icons.Default.PostAdd, contentDescription = "নিয়োগ প্রকাশ", tint = ElegantGreen) },
+                    label = { Text("নিয়োগ প্রকাশ", fontWeight = FontWeight.Medium) },
+                    selected = currentRoute == "post_niyog",
+                    onClick = {
+                        coroutineScope.launch { drawerState.close() }
+                        navController.navigate("post_niyog") { popUpTo("home") }
+                    },
+                    modifier = Modifier.padding(NavigationDrawerItemDefaults.ItemPadding)
+                )
+
+                NavigationDrawerItem(
+                    icon = { Icon(Icons.AutoMirrored.Filled.List, contentDescription = "আবেদন", tint = ElegantGreen) },
+                    label = { Text("আবেদন", fontWeight = FontWeight.Medium) },
+                    selected = currentRoute == "abedon",
+                    onClick = {
+                        coroutineScope.launch { drawerState.close() }
+                        navController.navigate("abedon") { popUpTo("home") }
+                    },
+                    modifier = Modifier.padding(NavigationDrawerItemDefaults.ItemPadding)
+                )
+
+                NavigationDrawerItem(
+                    icon = { Icon(Icons.Default.Person, contentDescription = "প্রোফাইল", tint = ElegantGreen) },
+                    label = { Text("প্রোফাইল", fontWeight = FontWeight.Medium) },
+                    selected = currentRoute == "profile",
+                    onClick = {
+                        coroutineScope.launch { drawerState.close() }
+                        navController.navigate("profile") { popUpTo("home") }
+                    },
+                    modifier = Modifier.padding(NavigationDrawerItemDefaults.ItemPadding)
+                )
+
+                HorizontalDivider(
+                    modifier = Modifier.padding(vertical = 12.dp, horizontal = 16.dp),
+                    color = Color.LightGray.copy(alpha = 0.5f)
+                )
+
+                NavigationDrawerItem(
+                    icon = { Icon(Icons.AutoMirrored.Filled.Logout, contentDescription = "লগআউট", tint = Color(0xFFB00020)) },
+                    label = { Text("লগআউট", color = Color(0xFFB00020), fontWeight = FontWeight.Bold) },
+                    selected = false,
+                    onClick = {
+                        coroutineScope.launch {
+                            drawerState.close()
+                            auth.signOut()
+                            navController.navigate("auth") {
+                                popUpTo(0) { inclusive = true }
+                            }
+                        }
+                    },
+                    modifier = Modifier.padding(NavigationDrawerItemDefaults.ItemPadding)
+                )
             }
         }
-    ) { innerPadding ->
-        NavHost(
-            navController, 
-            startDestination = if (FirebaseAuth.getInstance().currentUser != null) "home" else "auth", 
-            Modifier.padding(innerPadding)
-        ) {
-            composable("auth") { AuthScreen(navController) }
-            composable("home") { HomeScreen(navController) }
-            composable("khedmot") { SimpleScreen("খেদমত") }
-            composable("abedon") { SimpleScreen("আবেদন") }
-            composable("profile") { ProfileScreen(navController) }
-            composable("search_khedmot") { SimpleScreen("খেদমত খোঁজা") }
-            composable("post_niyog") { SimpleScreen("নিয়োগ প্রকাশ") }
+    ) {
+        Scaffold(
+            bottomBar = {
+                if (currentRoute in routes) {
+                    NavigationBar(containerColor = Color(0xFF1E1E1E), tonalElevation = 8.dp) {
+                        items.forEachIndexed { index, (label, icon) ->
+                            NavigationBarItem(
+                                selected = currentRoute == routes[index],
+                                onClick = { navController.navigate(routes[index]) { popUpTo("home") } },
+                                icon = { Icon(icon, contentDescription = label) },
+                                label = { Text(label) },
+                                colors = NavigationBarItemDefaults.colors(
+                                    selectedIconColor = Color(0xFFC9A44C),
+                                    selectedTextColor = Color(0xFFC9A44C),
+                                    indicatorColor = Color(0xFF333333)
+                                )
+                            )
+                        }
+                    }
+                }
+            }
+        ) { innerPadding ->
+            NavHost(
+                navController, 
+                startDestination = if (FirebaseAuth.getInstance().currentUser != null) "home" else "auth", 
+                Modifier.padding(innerPadding)
+            ) {
+                composable("auth") { AuthScreen(navController) }
+                composable("home") { 
+                    HomeScreen(
+                        navController = navController,
+                        onOpenDrawer = { coroutineScope.launch { drawerState.open() } }
+                    ) 
+                }
+                composable("khedmot") { SimpleScreen("খেদমত") }
+                composable("abedon") { SimpleScreen("আবেদন") }
+                composable("profile") { ProfileScreen(navController) }
+                composable("search_khedmot") { SimpleScreen("খেদমত খোঁজা") }
+                composable("post_niyog") { SimpleScreen("নিয়োগ প্রকাশ") }
+            }
         }
     }
 }
@@ -536,8 +682,95 @@ fun InfoCard(text: String, containerColor: Color, textColor: Color, modifier: Mo
     }
 }
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
-fun HomeScreen(navController: NavController) {
+fun CompactDateHeader(modifier: Modifier = Modifier) {
+    val dateInfo = remember { DateUtils.getCurrentDateInfo() }
+
+    Surface(
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(horizontal = 4.dp),
+        color = WarmOffWhite.copy(alpha = 0.6f),
+        shape = RoundedCornerShape(8.dp)
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 10.dp, vertical = 6.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            FlowRow(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.Center,
+                verticalArrangement = Arrangement.Center
+            ) {
+                // বাংলা তারিখ
+                Text(
+                    text = dateInfo.bengaliDate,
+                    fontSize = 11.5.sp,
+                    fontWeight = FontWeight.Normal,
+                    color = DeepEmerald.copy(alpha = 0.85f)
+                )
+
+                Text(
+                    text = " • ",
+                    fontSize = 11.5.sp,
+                    color = Color.Gray.copy(alpha = 0.6f)
+                )
+
+                // ইংরেজি তারিখ
+                Text(
+                    text = dateInfo.englishDate,
+                    fontSize = 11.5.sp,
+                    fontWeight = FontWeight.Normal,
+                    color = DeepEmerald.copy(alpha = 0.85f)
+                )
+
+                Text(
+                    text = " • ",
+                    fontSize = 11.5.sp,
+                    color = Color.Gray.copy(alpha = 0.6f)
+                )
+
+                // হিজরি তারিখ
+                Text(
+                    text = dateInfo.hijriDate,
+                    fontSize = 11.5.sp,
+                    fontWeight = FontWeight.Normal,
+                    color = DeepEmerald.copy(alpha = 0.85f)
+                )
+
+                Text(
+                    text = " • ",
+                    fontSize = 11.5.sp,
+                    color = Color.Gray.copy(alpha = 0.6f)
+                )
+
+                // সপ্তাহের বার
+                Text(
+                    text = dateInfo.weekday,
+                    fontSize = 11.5.sp,
+                    fontWeight = FontWeight.Normal,
+                    color = DeepEmerald.copy(alpha = 0.85f)
+                )
+            }
+
+            Text(
+                text = "*হিজরি তারিখ স্থানীয় চাঁদ দেখার ওপর পরিবর্তনশীল",
+                fontSize = 9.5.sp,
+                color = Color.Gray.copy(alpha = 0.7f),
+                modifier = Modifier.padding(top = 2.dp)
+            )
+        }
+    }
+}
+
+@Composable
+fun HomeScreen(
+    navController: NavController,
+    onOpenDrawer: () -> Unit = {}
+) {
     val context = androidx.compose.ui.platform.LocalContext.current
     val auth = remember { FirebaseAuth.getInstance() }
     val initialUser = auth.currentUser
@@ -568,49 +801,124 @@ fun HomeScreen(navController: NavController) {
         modifier = Modifier
             .fillMaxSize()
             .background(MaterialTheme.colorScheme.background)
-            .padding(16.dp)
+            .padding(horizontal = 16.dp, vertical = 10.dp)
+            .verticalScroll(rememberScrollState())
     ) {
+        // 1. Top Header with Hamburger menu on left and App Title
+        // (Separate profile icon on top-right is removed)
         Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(vertical = 4.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Column(modifier = Modifier.weight(1f)) {
-                Text(text = "কওমি কর্মসংস্থান বাংলাদেশ", fontSize = 22.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
-                Text(
-                    text = greetingName?.let { "স্বাগতম, $it" } ?: "আসসালামু আলাইকুম", 
-                    fontSize = 16.sp, 
-                    color = MaterialTheme.colorScheme.onBackground
+            IconButton(
+                onClick = onOpenDrawer,
+                modifier = Modifier.testTag("drawer_menu_button")
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Menu,
+                    contentDescription = "মেনু খুলুন",
+                    tint = ElegantGreen,
+                    modifier = Modifier.size(26.dp)
                 )
             }
-            IconButton(onClick = { navController.navigate("profile") }) {
-                Icon(Icons.Default.AccountCircle, contentDescription = "Profile", tint = ElegantGreen, modifier = Modifier.size(32.dp))
-            }
+
+            Text(
+                text = "কওমি কর্মসংস্থান বাংলাদেশ",
+                fontSize = 19.sp,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.primary,
+                textAlign = TextAlign.Center,
+                modifier = Modifier
+                    .weight(1f)
+                    .padding(end = 40.dp) // Balances left hamburger icon for optical centering
+            )
         }
-        
+
         Spacer(modifier = Modifier.height(6.dp))
-        Text(text = "আপনার উপযুক্ত খেদমতের সুযোগ খুঁজে নিন।", fontSize = 14.sp, color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.7f))
-        
+
+        // 2. Compact Date Header
+        CompactDateHeader()
+
+        Spacer(modifier = Modifier.height(18.dp))
+
+        // 3. Centered Home Page Welcome Section
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Text(
+                text = "কওমি কর্মসংস্থান",
+                fontSize = 24.sp,
+                fontWeight = FontWeight.Bold,
+                color = ElegantGreen,
+                textAlign = TextAlign.Center
+            )
+
+            Spacer(modifier = Modifier.height(4.dp))
+
+            val welcomeText = if (!greetingName.isNullOrBlank()) {
+                "স্বাগতম, $greetingName"
+            } else {
+                "স্বাগতম"
+            }
+
+            Text(
+                text = welcomeText,
+                fontSize = 16.sp,
+                fontWeight = FontWeight.SemiBold,
+                color = DeepEmerald,
+                textAlign = TextAlign.Center
+            )
+
+            Spacer(modifier = Modifier.height(4.dp))
+
+            Text(
+                text = "আপনার উপযুক্ত খেদমতের সুযোগ খুঁজে নিন।",
+                fontSize = 13.5.sp,
+                color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.7f),
+                textAlign = TextAlign.Center
+            )
+        }
+
         Spacer(modifier = Modifier.height(20.dp))
-        
+
         var query by remember { mutableStateOf("") }
         OutlinedTextField(
             value = query,
             onValueChange = { query = it },
             placeholder = { Text("খেদমত বা প্রতিষ্ঠানের নাম লিখুন") },
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier.fillMaxWidth().testTag("search_field"),
+            shape = RoundedCornerShape(12.dp),
             colors = OutlinedTextFieldDefaults.colors(
                 focusedBorderColor = MaterialTheme.colorScheme.primary,
                 unfocusedBorderColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.5f)
             ),
-            trailingIcon = { IconButton(onClick = { /* Handle Search */ }) { Icon(Icons.Default.Search, contentDescription = "Search", tint = MaterialTheme.colorScheme.primary) } }
+            trailingIcon = {
+                IconButton(onClick = { /* Handle Search */ }) {
+                    Icon(Icons.Default.Search, contentDescription = "Search", tint = MaterialTheme.colorScheme.primary)
+                }
+            }
         )
-        
-        Spacer(modifier = Modifier.height(24.dp))
-        
+
+        Spacer(modifier = Modifier.height(20.dp))
+
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-            InfoCard(text = "খেদমত খুঁজুন", containerColor = DarkGreenBox, textColor = White, modifier = Modifier.weight(1f).clickable { navController.navigate("search_khedmot") })
-            InfoCard(text = "নিয়োগ প্রকাশ", containerColor = GoldBox, textColor = IslamicGreen, modifier = Modifier.weight(1f).clickable { navController.navigate("post_niyog") })
+            InfoCard(
+                text = "খেদমত খুঁজুন",
+                containerColor = DarkGreenBox,
+                textColor = White,
+                modifier = Modifier.weight(1f).clickable { navController.navigate("search_khedmot") }
+            )
+            InfoCard(
+                text = "নিয়োগ প্রকাশ",
+                containerColor = GoldBox,
+                textColor = IslamicGreen,
+                modifier = Modifier.weight(1f).clickable { navController.navigate("post_niyog") }
+            )
         }
     }
 }

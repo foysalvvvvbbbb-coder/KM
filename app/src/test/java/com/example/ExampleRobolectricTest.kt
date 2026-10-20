@@ -117,5 +117,62 @@ class ExampleRobolectricTest {
         assertEquals("পাসওয়ার্ড রিসেট লিংক পাঠাতে ব্যর্থ হয়েছে। অনুগ্রহ করে আবার চেষ্টা করুন।", getPasswordResetErrorMessage(null))
     }
 
+    @Test
+    fun testBengaliDigitsConversion() {
+        assertEquals("০১২৩৪৫৬৭৮৯", DateUtils.toBengaliDigits("0123456789"))
+        assertEquals("২০২৬", DateUtils.toBengaliDigits(2026))
+        assertEquals("১৪৩৩", DateUtils.toBengaliDigits(1433L))
+    }
+
+    @Test
+    fun testDateUtilsBengaliCalendar() {
+        val cal = java.util.Calendar.getInstance()
+        // Set to April 14, 2026 (1 Boishakh 1433)
+        cal.set(2026, java.util.Calendar.APRIL, 14)
+        val boishakhDate = DateUtils.getBengaliDate(cal)
+        assertTrue("Expected 1 Boishakh: $boishakhDate", boishakhDate.contains("১ বৈশাখ ১৪৩৩ বঙ্গাব্দ"))
+
+        // Set to October 20, 2026 (4 Kartik 1433)
+        cal.set(2026, java.util.Calendar.OCTOBER, 20)
+        val kartikDate = DateUtils.getBengaliDate(cal)
+        assertTrue("Expected 4 Kartik: $kartikDate", kartikDate.contains("৪ কার্তিক ১৪৩৩ বঙ্গাব্দ"))
+    }
+
+    @Test
+    fun testDateUtilsEnglishDateInBengali() {
+        val cal = java.util.Calendar.getInstance()
+        cal.set(2026, java.util.Calendar.OCTOBER, 20)
+        val englishDate = DateUtils.getEnglishDate(cal)
+        assertEquals("২০ অক্টোবর ২০২৬", englishDate)
+    }
+
+    @Test
+    fun testDateUtilsWeekdayInBengali() {
+        val cal = java.util.Calendar.getInstance()
+        cal.set(2026, java.util.Calendar.OCTOBER, 20) // Tuesday
+        val weekday = DateUtils.getWeekday(cal)
+        assertEquals("মঙ্গলবার", weekday)
+    }
+
+    @Test
+    fun testHomeWelcomeMessageResolution() {
+        fun resolveWelcomeText(displayName: String?): String {
+            return if (!displayName.isNullOrBlank()) "স্বাগতম, $displayName" else "স্বাগতম"
+        }
+
+        assertEquals("স্বাগতম, হাফেজ মাওলানা আব্দুল্লাহ", resolveWelcomeText("হাফেজ মাওলানা আব্দুল্লাহ"))
+        assertEquals("স্বাগতম", resolveWelcomeText(null))
+        assertEquals("স্বাগতম", resolveWelcomeText(""))
+        assertEquals("স্বাগতম", resolveWelcomeText("   "))
+    }
+
+    @Test
+    fun testCurrentDateInfoGeneration() {
+        val dateInfo = DateUtils.getCurrentDateInfo()
+        assertTrue(dateInfo.bengaliDate.isNotBlank())
+        assertTrue(dateInfo.englishDate.isNotBlank())
+        assertTrue(dateInfo.hijriDate.isNotBlank())
+        assertTrue(dateInfo.weekday.isNotBlank())
+    }
 }
 
