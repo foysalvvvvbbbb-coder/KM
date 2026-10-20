@@ -240,7 +240,7 @@ object DateUtils {
                     hour < 4 -> "রাত"
                     hour < 12 -> "সকাল"
                     hour == 12 -> "দুপুর"
-                    hour < 16 -> { hour -= 12; "দুপুর" }
+                    hour < 15 -> { hour -= 12; "দুপুর" }
                     hour < 18 -> { hour -= 12; "বিকাল" }
                     hour < 20 -> { hour -= 12; "সন্ধ্যা" }
                     else -> { hour -= 12; "রাত" }

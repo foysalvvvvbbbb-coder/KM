@@ -174,5 +174,101 @@ class ExampleRobolectricTest {
         assertTrue(dateInfo.hijriDate.isNotBlank())
         assertTrue(dateInfo.weekday.isNotBlank())
     }
+
+    @Test
+    fun testFallbackPrayerTimes() {
+        val prayers = PrayerTimeManager.getFallbackPrayerTimes()
+        assertEquals(5, prayers.size)
+        assertEquals("ফজর", prayers[0].name)
+        assertEquals("04:42", prayers[0].start)
+        assertEquals("05:58", prayers[0].end)
+
+        assertEquals("যোহর", prayers[1].name)
+        assertEquals("11:43", prayers[1].start)
+        assertEquals("15:51", prayers[1].end) // Ends when Hanafi Asr starts
+
+        assertEquals("আসর", prayers[2].name)
+        assertEquals("15:51", prayers[2].start) // Hanafi Asr (2x shadow)
+        assertEquals("17:28", prayers[2].end) // Sunset/Maghrib
+
+        assertEquals("মাগরিব", prayers[3].name)
+        assertEquals("17:28", prayers[3].start)
+        assertEquals("18:44", prayers[3].end) // Isha start
+
+        assertEquals("ইশা", prayers[4].name)
+        assertEquals("18:44", prayers[4].start)
+        assertEquals("04:42", prayers[4].end) // Subh Sadiq (Fajr start)
+
+        for (prayer in prayers) {
+            assertTrue(prayer.start.matches("^\\d{2}:\\d{2}$".toRegex()))
+            assertTrue(prayer.end.matches("^\\d{2}:\\d{2}$".toRegex()))
+        }
+    }
+
+    @Test
+    fun testDhakaHanafiConstants() {
+        assertEquals(23.8103, PrayerTimeManager.DHAKA_LATITUDE, 0.0001)
+        assertEquals(90.4125, PrayerTimeManager.DHAKA_LONGITUDE, 0.0001)
+        assertEquals(1, PrayerTimeManager.METHOD_KARACHI)
+        assertEquals(1, PrayerTimeManager.SCHOOL_HANAFI)
+    }
+
+    @Test
+    fun testTimeFormat12HourBengali() {
+        assertEquals("০৪:৪২ সকাল", DateUtils.formatTimeTo12Hour("04:42"))
+        assertEquals("০৫:৫৮ সকাল", DateUtils.formatTimeTo12Hour("05:58"))
+        assertEquals("১১:৪৩ সকাল", DateUtils.formatTimeTo12Hour("11:43"))
+        assertEquals("০৩:৫১ বিকাল", DateUtils.formatTimeTo12Hour("15:51"))
+        assertEquals("০৫:২৮ বিকাল", DateUtils.formatTimeTo12Hour("17:28"))
+        assertEquals("০৬:৪৪ সন্ধ্যা", DateUtils.formatTimeTo12Hour("18:44"))
+    }
+
+    @Test
+    fun testPrayerIntervalCalculation() {
+        fun calculateActivePrayer(currentMinutes: Int, fajr: Int, sunrise: Int, dhuhr: Int, asr: Int, maghrib: Int, isha: Int): Int {
+            return when {
+                currentMinutes in fajr until sunrise -> 0 // ফজর
+                currentMinutes in sunrise until dhuhr -> -1 // চাশত / যোহরের অপেক্ষা
+                currentMinutes in dhuhr until asr -> 1 // যোহর
+                currentMinutes in asr until maghrib -> 2 // আসর
+                currentMinutes in maghrib until isha -> 3 // মাগরিব
+                currentMinutes >= isha || currentMinutes < fajr -> 4 // ইশা
+                else -> -1
+            }
+        }
+
+        // Times in minutes for Hanafi Karachi Method:
+        // Fajr: 04:42 (282), Sunrise: 05:58 (358)
+        // Dhuhr: 11:43 (703), Asr: 15:51 (951)
+        // Maghrib: 17:28 (1048), Isha: 18:44 (1124)
+        val f = 282; val sr = 358; val d = 703; val a = 951; val m = 1048; val i = 1124
+
+        // 5:00 AM (300 min) -> Fajr
+        assertEquals(0, calculateActivePrayer(300, f, sr, d, a, m, i))
+
+        // 10:00 AM (600 min) -> Pre-Dhuhr (-1)
+        assertEquals(-1, calculateActivePrayer(600, f, sr, d, a, m, i))
+
+        // 1:00 PM (780 min) -> Dhuhr
+        assertEquals(1, calculateActivePrayer(780, f, sr, d, a, m, i))
+
+        // 3:30 PM (930 min) -> Dhuhr still active under Hanafi (Asr starts at 15:51 / 951)
+        assertEquals(1, calculateActivePrayer(930, f, sr, d, a, m, i))
+
+        // 4:00 PM (960 min) -> Asr
+        assertEquals(2, calculateActivePrayer(960, f, sr, d, a, m, i))
+
+        // 6:00 PM (1080 min) -> Maghrib!
+        assertEquals(3, calculateActivePrayer(1080, f, sr, d, a, m, i))
+
+        // 7:30 PM (1170 min) -> Isha!
+        assertEquals(4, calculateActivePrayer(1170, f, sr, d, a, m, i))
+
+        // 11:30 PM (1410 min) -> Isha!
+        assertEquals(4, calculateActivePrayer(1410, f, sr, d, a, m, i))
+
+        // 3:00 AM (180 min) -> Night / Isha period before Fajr!
+        assertEquals(4, calculateActivePrayer(180, f, sr, d, a, m, i))
+    }
 }
 

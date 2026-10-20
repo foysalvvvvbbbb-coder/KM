@@ -1,0 +1,47 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="64dp"
+    android:height="64dp"
+    android:viewportWidth="64"
+    android:viewportHeight="64">
+
+    <!-- Background card -->
+    <path
+        android:fillColor="#E2F1E8"
+        android:pathData="M0,8 C0,3.6 3.6,0 8,0 H56 C60.4,0 64,3.6 64,8 V56 C64,60.4 60.4,64 56,64 H8 C3.6,64 0,60.4 0,56 Z" />
+
+    <!-- Building base -->
+    <path
+        android:fillColor="#C4E4D2"
+        android:pathData="M16,36 H48 V56 H16 Z" />
+
+    <!-- Dome -->
+    <path
+        android:fillColor="#2D6A4F"
+        android:pathData="M24,36 C24,24 32,18 32,18 C32,18 40,24 40,36 Z" />
+
+    <!-- Crescent -->
+    <path
+        android:fillColor="#D4AF37"
+        android:pathData="M32,12 C33.5,12 35,10.5 35,9 C35,7.5 33.5,6 32,6 C33,7 33,11 32,12 Z" />
+
+    <!-- Door -->
+    <path
+        android:fillColor="#1B4332"
+        android:pathData="M27,56 V44 C27,41 37,41 37,44 V56 Z" />
+
+    <!-- Left Minaret -->
+    <path
+        android:fillColor="#52B788"
+        android:pathData="M10,26 H15 V56 H10 Z" />
+    <path
+        android:fillColor="#1B4332"
+        android:pathData="M10,26 C10,18 12.5,14 12.5,14 C12.5,14 15,18 15,26 Z" />
+
+    <!-- Right Minaret -->
+    <path
+        android:fillColor="#52B788"
+        android:pathData="M49,26 H54 V56 H49 Z" />
+    <path
+        android:fillColor="#1B4332"
+        android:pathData="M49,26 C49,18 51.5,14 51.5,14 C51.5,14 54,18 54,26 Z" />
+</vector>

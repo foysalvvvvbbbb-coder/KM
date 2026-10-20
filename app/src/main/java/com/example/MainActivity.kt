@@ -59,17 +59,12 @@ import kotlinx.coroutines.launch
 // Theme Colors
 val DeepEmerald = Color(0xFF0B3028)
 val ElegantGreen = Color(0xFF14523F)
-val WarmOffWhite = Color(0xFFF7F5EE) // Keeping but not using for background
+val WarmOffWhite = Color(0xFFF7F5EE)
 val MutedGold = Color(0xFFD9B66F)
 
 object AppSession {
-    // Light, elegant background colors (NO WHITE)
-    val backgroundColor: Color = listOf(
-        Color(0xFFE8F5E9), // Light Sage Green
-        Color(0xFFE3F2FD), // Light Pastel Blue
-        Color(0xFFF3E5F5), // Light Pastel Lavender
-        Color(0xFFFFF3E0)  // Light Pastel Peach
-    ).random()
+    // Calming, soft Islamic mist-sage background (soothing, zero eye-strain, non-glare)
+    val backgroundColor: Color = Color(0xFFF3F6F3)
 }
 
 class MainActivity : ComponentActivity() {
@@ -97,13 +92,19 @@ fun AppNavigation() {
     val auth = remember { FirebaseAuth.getInstance() }
     val currentUser = auth.currentUser
 
-    val items = listOf("হোম" to Icons.Default.Home, "খেদমত" to Icons.Default.Work, "আবেদন" to Icons.AutoMirrored.Filled.List, "প্রোফাইল" to Icons.Default.Person)
-    val routes = listOf("home", "khedmot", "abedon", "profile")
+    val items = listOf(
+        "হোম" to Icons.Default.Home,
+        "ফিড" to Icons.Default.Article,
+        "খেদমত" to Icons.Default.Work,
+        "আবেদন" to Icons.Default.Assignment,
+        "মাদ্রাসা" to Icons.Default.Person
+    )
+    val routes = listOf("home", "feed", "khedmot", "abedon", "madrasah")
     val currentRoute = navController.currentBackStackEntryAsState().value?.destination?.route
 
     ModalNavigationDrawer(
         drawerState = drawerState,
-        gesturesEnabled = currentRoute in routes,
+        gesturesEnabled = currentRoute in routes || currentRoute == "profile",
         drawerContent = {
             ModalDrawerSheet(
                 drawerContainerColor = WarmOffWhite,
@@ -158,6 +159,17 @@ fun AppNavigation() {
                 )
 
                 NavigationDrawerItem(
+                    icon = { Icon(Icons.Default.Article, contentDescription = "ফিড", tint = ElegantGreen) },
+                    label = { Text("ফিড", fontWeight = FontWeight.Medium) },
+                    selected = currentRoute == "feed",
+                    onClick = {
+                        coroutineScope.launch { drawerState.close() }
+                        navController.navigate("feed") { popUpTo("home") }
+                    },
+                    modifier = Modifier.padding(NavigationDrawerItemDefaults.ItemPadding)
+                )
+
+                NavigationDrawerItem(
                     icon = { Icon(Icons.Default.Work, contentDescription = "খেদমত", tint = ElegantGreen) },
                     label = { Text("খেদমত", fontWeight = FontWeight.Medium) },
                     selected = currentRoute == "khedmot",
@@ -169,34 +181,23 @@ fun AppNavigation() {
                 )
 
                 NavigationDrawerItem(
-                    icon = { Icon(Icons.Default.Search, contentDescription = "খেদমত খুঁজুন", tint = ElegantGreen) },
-                    label = { Text("খেদমত খুঁজুন", fontWeight = FontWeight.Medium) },
-                    selected = currentRoute == "search_khedmot",
-                    onClick = {
-                        coroutineScope.launch { drawerState.close() }
-                        navController.navigate("search_khedmot") { popUpTo("home") }
-                    },
-                    modifier = Modifier.padding(NavigationDrawerItemDefaults.ItemPadding)
-                )
-
-                NavigationDrawerItem(
-                    icon = { Icon(Icons.Default.PostAdd, contentDescription = "নিয়োগ প্রকাশ", tint = ElegantGreen) },
-                    label = { Text("নিয়োগ প্রকাশ", fontWeight = FontWeight.Medium) },
-                    selected = currentRoute == "post_niyog",
-                    onClick = {
-                        coroutineScope.launch { drawerState.close() }
-                        navController.navigate("post_niyog") { popUpTo("home") }
-                    },
-                    modifier = Modifier.padding(NavigationDrawerItemDefaults.ItemPadding)
-                )
-
-                NavigationDrawerItem(
-                    icon = { Icon(Icons.AutoMirrored.Filled.List, contentDescription = "আবেদন", tint = ElegantGreen) },
+                    icon = { Icon(Icons.Default.Assignment, contentDescription = "আবেদন", tint = ElegantGreen) },
                     label = { Text("আবেদন", fontWeight = FontWeight.Medium) },
                     selected = currentRoute == "abedon",
                     onClick = {
                         coroutineScope.launch { drawerState.close() }
                         navController.navigate("abedon") { popUpTo("home") }
+                    },
+                    modifier = Modifier.padding(NavigationDrawerItemDefaults.ItemPadding)
+                )
+
+                NavigationDrawerItem(
+                    icon = { Icon(Icons.Default.AccountBalance, contentDescription = "মাদ্রাসা", tint = ElegantGreen) },
+                    label = { Text("মাদ্রাসা", fontWeight = FontWeight.Medium) },
+                    selected = currentRoute == "madrasah",
+                    onClick = {
+                        coroutineScope.launch { drawerState.close() }
+                        navController.navigate("madrasah") { popUpTo("home") }
                     },
                     modifier = Modifier.padding(NavigationDrawerItemDefaults.ItemPadding)
                 )
@@ -238,17 +239,43 @@ fun AppNavigation() {
         Scaffold(
             bottomBar = {
                 if (currentRoute in routes) {
-                    NavigationBar(containerColor = Color(0xFF1E1E1E), tonalElevation = 8.dp) {
+                    NavigationBar(
+                        containerColor = Color(0xFFEDF6F1),
+                        tonalElevation = 4.dp
+                    ) {
                         items.forEachIndexed { index, (label, icon) ->
+                            val isSelected = currentRoute == routes[index]
                             NavigationBarItem(
-                                selected = currentRoute == routes[index],
-                                onClick = { navController.navigate(routes[index]) { popUpTo("home") } },
-                                icon = { Icon(icon, contentDescription = label) },
-                                label = { Text(label) },
+                                selected = isSelected,
+                                onClick = {
+                                    if (currentRoute != routes[index]) {
+                                        navController.navigate(routes[index]) {
+                                            popUpTo("home") { saveState = true }
+                                            launchSingleTop = true
+                                            restoreState = true
+                                        }
+                                    }
+                                },
+                                icon = {
+                                    Icon(
+                                        imageVector = icon,
+                                        contentDescription = label,
+                                        modifier = Modifier.size(22.dp)
+                                    )
+                                },
+                                label = {
+                                    Text(
+                                        text = label,
+                                        fontSize = 11.sp,
+                                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium
+                                    )
+                                },
                                 colors = NavigationBarItemDefaults.colors(
-                                    selectedIconColor = Color(0xFFC9A44C),
-                                    selectedTextColor = Color(0xFFC9A44C),
-                                    indicatorColor = Color(0xFF333333)
+                                    selectedIconColor = QawmiDarkGreen,
+                                    selectedTextColor = QawmiDarkGreen,
+                                    indicatorColor = Color(0xFFC2E5D4),
+                                    unselectedIconColor = Color(0xFF5A786E),
+                                    unselectedTextColor = Color(0xFF5A786E)
                                 )
                             )
                         }
@@ -264,15 +291,61 @@ fun AppNavigation() {
                 composable("auth") { AuthScreen(navController) }
                 composable("home") { 
                     HomeScreen(
-                        navController = navController,
-                        onOpenDrawer = { coroutineScope.launch { drawerState.open() } }
+                        onOpenDrawer = { coroutineScope.launch { drawerState.open() } },
+                        onNavigateToFeed = { filter ->
+                            when (filter) {
+                                "আবেদন" -> navController.navigate("abedon") { popUpTo("home") }
+                                "নিয়োগ বিজ্ঞপ্তি" -> navController.navigate("khedmot") { popUpTo("home") }
+                                else -> navController.navigate("feed") { popUpTo("home") }
+                            }
+                        },
+                        onNavigateToProfile = {
+                            navController.navigate("profile") { popUpTo("home") }
+                        },
+                        onNavigateToMadrasah = {
+                            navController.navigate("madrasah") { popUpTo("home") }
+                        }
                     ) 
                 }
-                composable("khedmot") { SimpleScreen("খেদমত") }
-                composable("abedon") { SimpleScreen("আবেদন") }
+                composable("feed") { 
+                    FeedScreen(
+                        onOpenDrawer = { coroutineScope.launch { drawerState.open() } },
+                        initialFilter = "সব পোস্ট"
+                    ) 
+                }
+                composable("khedmot") { 
+                    FeedScreen(
+                        onOpenDrawer = { coroutineScope.launch { drawerState.open() } },
+                        initialFilter = "নিয়োগ বিজ্ঞপ্তি"
+                    ) 
+                }
+                composable("abedon") { 
+                    FeedScreen(
+                        onOpenDrawer = { coroutineScope.launch { drawerState.open() } },
+                        initialFilter = "আবেদন"
+                    ) 
+                }
+                composable("madrasah") { 
+                    MadrasahScreen(
+                        onOpenDrawer = { coroutineScope.launch { drawerState.open() } },
+                        onNavigateToFeedWithFilter = { filter ->
+                            navController.navigate("khedmot") { popUpTo("home") }
+                        }
+                    ) 
+                }
                 composable("profile") { ProfileScreen(navController) }
-                composable("search_khedmot") { SimpleScreen("খেদমত খোঁজা") }
-                composable("post_niyog") { SimpleScreen("নিয়োগ প্রকাশ") }
+                composable("search_khedmot") { 
+                    FeedScreen(
+                        onOpenDrawer = { coroutineScope.launch { drawerState.open() } },
+                        initialFilter = "নিয়োগ বিজ্ঞপ্তি"
+                    ) 
+                }
+                composable("post_niyog") { 
+                    FeedScreen(
+                        onOpenDrawer = { coroutineScope.launch { drawerState.open() } },
+                        initialFilter = "নিয়োগ বিজ্ঞপ্তি"
+                    ) 
+                }
             }
         }
     }
@@ -318,171 +391,488 @@ fun StyledButton(text: String, onClick: () -> Unit, modifier: Modifier = Modifie
 @Composable
 fun IslamicLoginScreen(navController: NavController, onRegister: () -> Unit) {
     val context = androidx.compose.ui.platform.LocalContext.current
-    val coroutineScope = rememberCoroutineScope()
     val auth = remember { FirebaseAuth.getInstance() }
     var email by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
     var passwordVisible by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
     var isLoading by remember { mutableStateOf(false) }
-    
-    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-        Card(
-            modifier = Modifier.fillMaxWidth(0.9f)
-                .clip(RoundedCornerShape(16.dp))
-                .background(WarmOffWhite.copy(alpha = 0.8f))
-                .border(1.dp, MutedGold.copy(alpha = 0.3f), RoundedCornerShape(16.dp)),
-            shape = RoundedCornerShape(16.dp),
-            colors = CardDefaults.cardColors(containerColor = Color.Transparent)
-        ) {
-            Column(
-                Modifier
-                    .padding(24.dp)
-                    .verticalScroll(rememberScrollState()), 
-                horizontalAlignment = Alignment.CenterHorizontally
-            ) {
-                Text(
-                    "কওমি কর্মসংস্থান বাংলাদেশ", 
-                    fontSize = 22.sp, 
-                    fontWeight = FontWeight.Bold, 
-                    color = ElegantGreen, 
-                    modifier = Modifier.padding(bottom = 24.dp)
-                )
-                
-                OutlinedTextField(
-                    value = email, 
-                    onValueChange = { email = it }, 
-                    label = { Text("ইমেইল") }, 
-                    modifier = Modifier.fillMaxWidth().testTag("email_input"), 
-                    shape = RoundedCornerShape(8.dp),
-                    enabled = !isLoading
-                )
-                Spacer(Modifier.height(16.dp))
-                OutlinedTextField(
-                    value = password, 
-                    onValueChange = { password = it }, 
-                    label = { Text("পাসওয়ার্ড") }, 
-                    modifier = Modifier.fillMaxWidth().testTag("password_input"), 
-                    shape = RoundedCornerShape(8.dp), 
-                    visualTransformation = if (passwordVisible) VisualTransformation.None else PasswordVisualTransformation(), 
-                    trailingIcon = { 
-                        IconButton(onClick = { passwordVisible = !passwordVisible }) { 
-                            Icon(if (passwordVisible) Icons.Default.Visibility else Icons.Default.VisibilityOff, "Toggle") 
-                        } 
-                    },
-                    enabled = !isLoading
-                )
-                
-                error?.let { 
-                    Text(
-                        it, 
-                        color = if (it.contains("পাঠানো হয়েছে")) Color(0xFF075B45) else Color(0xFFB00020), 
-                        fontSize = 12.sp, 
-                        fontWeight = FontWeight.Medium,
-                        modifier = Modifier.padding(top = 8.dp).testTag("auth_error_text")
-                    ) 
-                }
-                
-                var showForgotDialog by remember { mutableStateOf(false) }
-                
-                TextButton(
-                    onClick = { showForgotDialog = true }, 
-                    modifier = Modifier.align(Alignment.End),
-                    enabled = !isLoading
-                ) { Text("পাসওয়ার্ড ভুলে গেছেন?", color = ElegantGreen) }
+    var showForgotDialog by remember { mutableStateOf(false) }
 
-                if (showForgotDialog) {
-                    ForgotPasswordDialog(
-                        auth = auth,
-                        initialEmail = email,
-                        onDismiss = { showForgotDialog = false }
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(
+                Brush.verticalGradient(
+                    colors = listOf(
+                        Color(0xFF227357), // Soft glowing mint-emerald at top matching reference
+                        Color(0xFF0F4232), // Deep emerald
+                        Color(0xFF0B3A2D)  // Dark emerald at bottom of header
                     )
+                )
+            )
+            .verticalScroll(rememberScrollState())
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(bottom = 30.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Spacer(Modifier.height(12.dp))
+
+            // Header Section with Hanging Lanterns and Central Mosque Emblem
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(300.dp),
+                contentAlignment = Alignment.TopCenter
+            ) {
+                // Background Mosque Silhouette Art & Gradient Glow via Canvas
+                Canvas(modifier = Modifier.fillMaxSize()) {
+                    val paintFar = androidx.compose.ui.graphics.Color(0xFF14533F).copy(alpha = 0.6f)
+                    val pathFar = androidx.compose.ui.graphics.Path().apply {
+                        moveTo(0f, size.height - 30f)
+                        quadraticTo(size.width * 0.25f, size.height - 85f, size.width * 0.5f, size.height - 55f)
+                        quadraticTo(size.width * 0.75f, size.height - 85f, size.width, size.height - 30f)
+                        lineTo(size.width, size.height)
+                        lineTo(0f, size.height)
+                        close()
+                    }
+                    drawPath(pathFar, paintFar)
+
+                    val paintNear = androidx.compose.ui.graphics.Color(0xFF104434)
+                    val pathNear = androidx.compose.ui.graphics.Path().apply {
+                        moveTo(0f, size.height)
+                        lineTo(0f, size.height - 45f)
+                        cubicTo(
+                            size.width * 0.3f, size.height - 45f,
+                            size.width * 0.4f, size.height - 100f,
+                            size.width * 0.5f, size.height - 100f
+                        )
+                        cubicTo(
+                            size.width * 0.6f, size.height - 100f,
+                            size.width * 0.7f, size.height - 45f,
+                            size.width, size.height - 30f
+                        )
+                        lineTo(size.width, size.height)
+                        close()
+                    }
+                    drawPath(pathNear, paintNear)
                 }
-                
-                Spacer(Modifier.height(16.dp))
-                Button(
-                    onClick = {
-                        val trimmedEmail = email.trim()
-                        if (trimmedEmail.isBlank()) {
-                            error = "আপনার ইমেইল লিখুন।"
-                        } else if (!Patterns.EMAIL_ADDRESS.matcher(trimmedEmail).matches()) {
-                            error = "সঠিক ইমেইল ফরম্যাট দিন (যেমন: name@example.com)।"
-                        } else if (password.isBlank()) {
-                            error = "আপনার পাসওয়ার্ড লিখুন।"
-                        } else if (password.length < 6) {
-                            error = "পাসওয়ার্ড অন্তত ৬ অক্ষরের হতে হবে।"
-                        } else {
-                            isLoading = true
-                            error = null
-                            try {
-                                auth.signInWithEmailAndPassword(trimmedEmail, password)
-                                    .addOnCompleteListener { task ->
-                                        isLoading = false
-                                        if (task.isSuccessful && auth.currentUser != null) {
-                                            val user = auth.currentUser
-                                            android.util.Log.d("AuthDebug", "Login Success for uid: ${user?.uid}")
-                                            val userDisplayName = user?.displayName
-                                            if (!userDisplayName.isNullOrBlank()) {
-                                                try {
-                                                    val prefs = context.getSharedPreferences("user_prefs", android.content.Context.MODE_PRIVATE)
-                                                    user.uid.let { uid ->
-                                                        prefs.edit().putString("name_$uid", userDisplayName).apply()
-                                                    }
-                                                } catch (_: Exception) {}
-                                            }
-                                            navController.navigate("home") {
-                                                popUpTo("auth") { inclusive = true }
-                                            }
-                                        } else {
-                                            val ex = task.exception
-                                            android.util.Log.e("AuthDebug", "Login Failed", ex)
-                                            error = getAuthErrorMessage(ex)
-                                        }
-                                    }
-                                    .addOnFailureListener { ex ->
-                                        isLoading = false
-                                        android.util.Log.e("AuthDebug", "Login Failure Listener", ex)
-                                        error = getAuthErrorMessage(ex)
-                                    }
-                            } catch (e: Exception) {
-                                isLoading = false
-                                android.util.Log.e("AuthDebug", "Login Exception", e)
-                                error = getAuthErrorMessage(e)
-                            }
+
+                // Hanging Lanterns on Left and Right (Ornate Fanoos style with chain)
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 26.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.Top
+                ) {
+                    // Left Lantern
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Box(
+                            modifier = Modifier
+                                .width(1.5.dp)
+                                .height(40.dp)
+                                .background(Color(0xFFE2C98F))
+                        )
+                        Box(
+                            modifier = Modifier
+                                .size(40.dp)
+                                .clip(RoundedCornerShape(10.dp))
+                                .background(Color(0xFF14523F))
+                                .border(1.5.dp, Color(0xFFE2C98F), RoundedCornerShape(10.dp)),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.WbSunny,
+                                contentDescription = "Lantern",
+                                tint = Color(0xFFE2C98F),
+                                modifier = Modifier.size(24.dp)
+                            )
                         }
-                    }, 
-                    modifier = Modifier.fillMaxWidth().height(50.dp).testTag("login_button"), 
-                    colors = ButtonDefaults.buttonColors(containerColor = ElegantGreen), 
-                    enabled = !isLoading
-                ) { 
-                    if (isLoading) {
-                        CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp, color = WarmOffWhite)
-                        Spacer(Modifier.width(8.dp))
-                        Text("লগইন হচ্ছে...", color = WarmOffWhite, fontSize = 16.sp)
-                    } else {
-                        Text("লগইন করুন", color = WarmOffWhite, fontSize = 16.sp) 
+                    }
+
+                    // Right Lantern
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Box(
+                            modifier = Modifier
+                                .width(1.5.dp)
+                                .height(40.dp)
+                                .background(Color(0xFFE2C98F))
+                        )
+                        Box(
+                            modifier = Modifier
+                                .size(40.dp)
+                                .clip(RoundedCornerShape(10.dp))
+                                .background(Color(0xFF14523F))
+                                .border(1.5.dp, Color(0xFFE2C98F), RoundedCornerShape(10.dp)),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.WbSunny,
+                                contentDescription = "Lantern",
+                                tint = Color(0xFFE2C98F),
+                                modifier = Modifier.size(24.dp)
+                            )
+                        }
                     }
                 }
 
-                if (error != null) {
-                    Spacer(Modifier.height(12.dp))
+                // Central Content: Circular Mosque Emblem, Title, and Slogan
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 12.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    // Circular Mosque Emblem (Rich Design with Mosque / Dome Icon matching reference)
+                    Box(
+                        modifier = Modifier
+                            .size(86.dp)
+                            .clip(CircleShape)
+                            .background(Color(0xFF0C382E))
+                            .border(3.dp, Color(0xFFE2C98F), CircleShape)
+                            .shadow(8.dp, CircleShape),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Mosque,
+                            contentDescription = "Mosque Emblem",
+                            tint = Color.White,
+                            modifier = Modifier.size(46.dp)
+                        )
+                    }
+
+                    Spacer(Modifier.height(10.dp))
+
                     Text(
-                        text = error ?: "",
-                        color = Color(0xFFB00020),
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.Medium,
-                        textAlign = androidx.compose.ui.text.style.TextAlign.Center,
-                        modifier = Modifier.padding(horizontal = 8.dp)
+                        text = "কওমি কর্মসংস্থান",
+                        fontSize = 27.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color(0xFFFFFFFF),
+                        letterSpacing = 0.5.sp
+                    )
+
+                    Spacer(Modifier.height(4.dp))
+
+                    Text(
+                        text = "দ্বীনি খেদমতের মাধ্যমে আলোকিত সমাজ গঠন",
+                        fontSize = 13.sp,
+                        color = Color(0xFFC7E2D8),
+                        fontWeight = FontWeight.Medium
                     )
                 }
-                
-                TextButton(
-                    onClick = onRegister, 
-                    modifier = Modifier.padding(top = 8.dp),
-                    enabled = !isLoading
-                ) { 
-                    Text("নতুন অ্যাকাউন্ট তৈরি করুন", color = ElegantGreen, fontWeight = FontWeight.Bold) 
+            }
+
+            Spacer(Modifier.height(2.dp))
+
+            // Large Curved Login Card (Light Mint/Cream background)
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp),
+                shape = RoundedCornerShape(topStart = 32.dp, topEnd = 32.dp, bottomStart = 24.dp, bottomEnd = 24.dp),
+                colors = CardDefaults.cardColors(containerColor = Color(0xFFF2F8F5)),
+                elevation = CardDefaults.cardElevation(defaultElevation = 8.dp)
+            ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(24.dp),
+                    horizontalAlignment = Alignment.Start
+                ) {
+                    Text(
+                        text = "লগইন করুন",
+                        fontSize = 22.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color(0xFF0B3A2D)
+                    )
+                    Spacer(Modifier.height(4.dp))
+                    Text(
+                        text = "আপনার ইমেইল ও পাসওয়ার্ড দিয়ে প্রবেশ করুন",
+                        fontSize = 13.sp,
+                        color = Color(0xFF5A786E)
+                    )
+
+                    Spacer(Modifier.height(20.dp))
+
+                    // Email Field
+                    OutlinedTextField(
+                        value = email,
+                        onValueChange = { email = it; error = null },
+                        placeholder = { Text("ইমেইল ঠিকানা", color = Color(0xFF8FA89D), fontSize = 14.sp) },
+                        leadingIcon = {
+                            Icon(
+                                imageVector = Icons.Outlined.Email,
+                                contentDescription = null,
+                                tint = Color(0xFF14523F)
+                            )
+                        },
+                        singleLine = true,
+                        shape = RoundedCornerShape(12.dp),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = Color(0xFF14523F),
+                            unfocusedBorderColor = Color(0xFFD0E2D8),
+                            focusedContainerColor = Color.White,
+                            unfocusedContainerColor = Color.White
+                        ),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .testTag("email_input"),
+                        enabled = !isLoading
+                    )
+
+                    Spacer(Modifier.height(14.dp))
+
+                    // Password Field
+                    OutlinedTextField(
+                        value = password,
+                        onValueChange = { password = it; error = null },
+                        placeholder = { Text("পাসওয়ার্ড", color = Color(0xFF8FA89D), fontSize = 14.sp) },
+                        leadingIcon = {
+                            Icon(
+                                imageVector = Icons.Outlined.Lock,
+                                contentDescription = null,
+                                tint = Color(0xFF14523F)
+                            )
+                        },
+                        trailingIcon = {
+                            IconButton(onClick = { passwordVisible = !passwordVisible }) {
+                                Icon(
+                                    imageVector = if (passwordVisible) Icons.Default.Visibility else Icons.Default.VisibilityOff,
+                                    contentDescription = "Toggle password",
+                                    tint = Color(0xFF14523F)
+                                )
+                            }
+                        },
+                        visualTransformation = if (passwordVisible) VisualTransformation.None else PasswordVisualTransformation(),
+                        singleLine = true,
+                        shape = RoundedCornerShape(12.dp),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = Color(0xFF14523F),
+                            unfocusedBorderColor = Color(0xFFD0E2D8),
+                            focusedContainerColor = Color.White,
+                            unfocusedContainerColor = Color.White
+                        ),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .testTag("password_input"),
+                        enabled = !isLoading
+                    )
+
+                    Spacer(Modifier.height(8.dp))
+
+                    // Forgot Password link aligned right
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.End
+                    ) {
+                        TextButton(
+                            onClick = { showForgotDialog = true },
+                            enabled = !isLoading,
+                            contentPadding = PaddingValues(0.dp)
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(
+                                    imageVector = Icons.Outlined.Lock,
+                                    contentDescription = null,
+                                    tint = Color(0xFF14523F),
+                                    modifier = Modifier.size(13.dp)
+                                )
+                                Spacer(Modifier.width(4.dp))
+                                Text(
+                                    text = "পাসওয়ার্ড ভুলে গেছেন?",
+                                    color = Color(0xFF14523F),
+                                    fontSize = 13.sp,
+                                    fontWeight = FontWeight.SemiBold
+                                )
+                            }
+                        }
+                    }
+
+                    if (showForgotDialog) {
+                        ForgotPasswordDialog(
+                            auth = auth,
+                            initialEmail = email,
+                            onDismiss = { showForgotDialog = false }
+                        )
+                    }
+
+                    error?.let {
+                        Spacer(Modifier.height(6.dp))
+                        Text(
+                            text = it,
+                            color = if (it.contains("পাঠানো")) Color(0xFF075B45) else Color(0xFFB00020),
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Medium,
+                            modifier = Modifier.testTag("auth_error_text")
+                        )
+                    }
+
+                    Spacer(Modifier.height(16.dp))
+
+                    // Login Button (Dark Green with arrow)
+                    Button(
+                        onClick = {
+                            val trimmedEmail = email.trim()
+                            if (trimmedEmail.isBlank()) {
+                                error = "আপনার ইমেইল লিখুন।"
+                            } else if (!Patterns.EMAIL_ADDRESS.matcher(trimmedEmail).matches()) {
+                                error = "সঠিক ইমেইল ফরম্যাট দিন (যেমন: name@example.com)।"
+                            } else if (password.isBlank()) {
+                                error = "আপনার পাসওয়ার্ড লিখুন।"
+                            } else if (password.length < 6) {
+                                error = "পাসওয়ার্ড অন্তত ৬ অক্ষরের হতে হবে।"
+                            } else {
+                                isLoading = true
+                                error = null
+                                try {
+                                    auth.signInWithEmailAndPassword(trimmedEmail, password)
+                                        .addOnCompleteListener { task ->
+                                            isLoading = false
+                                            if (task.isSuccessful && auth.currentUser != null) {
+                                                val user = auth.currentUser
+                                                val userDisplayName = user?.displayName
+                                                if (!userDisplayName.isNullOrBlank()) {
+                                                    try {
+                                                        val prefs = context.getSharedPreferences("user_prefs", android.content.Context.MODE_PRIVATE)
+                                                        user.uid.let { uid ->
+                                                            prefs.edit().putString("name_$uid", userDisplayName).apply()
+                                                        }
+                                                    } catch (_: Exception) {}
+                                                }
+                                                navController.navigate("home") {
+                                                    popUpTo("auth") { inclusive = true }
+                                                }
+                                            } else {
+                                                val ex = task.exception
+                                                error = getAuthErrorMessage(ex)
+                                            }
+                                        }
+                                        .addOnFailureListener { ex ->
+                                            isLoading = false
+                                            error = getAuthErrorMessage(ex)
+                                        }
+                                } catch (e: Exception) {
+                                    isLoading = false
+                                    error = getAuthErrorMessage(e)
+                                }
+                            }
+                        },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(52.dp)
+                            .testTag("login_button"),
+                        shape = RoundedCornerShape(12.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF0A4232)),
+                        enabled = !isLoading
+                    ) {
+                        if (isLoading) {
+                            CircularProgressIndicator(modifier = Modifier.size(22.dp), strokeWidth = 2.dp, color = Color.White)
+                            Spacer(Modifier.width(8.dp))
+                            Text("লগইন হচ্ছে...", color = Color.White, fontSize = 15.sp)
+                        } else {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.Center
+                            ) {
+                                Text("লগইন করুন", color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.Bold)
+                                Spacer(Modifier.width(8.dp))
+                                Icon(
+                                    imageVector = Icons.AutoMirrored.Filled.ArrowForward,
+                                    contentDescription = null,
+                                    tint = Color.White,
+                                    modifier = Modifier.size(18.dp)
+                                )
+                            }
+                        }
+                    }
+
+                    Spacer(Modifier.height(18.dp))
+
+                    // Divider with "অথবা"
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.Center
+                    ) {
+                        HorizontalDivider(modifier = Modifier.weight(1f), color = Color(0xFFD0E2D8))
+                        Text(
+                            text = "  অথবা  ",
+                            color = Color(0xFF708C80),
+                            fontSize = 12.sp
+                        )
+                        HorizontalDivider(modifier = Modifier.weight(1f), color = Color(0xFFD0E2D8))
+                    }
+
+                    Spacer(Modifier.height(18.dp))
+
+                    // Register Button (Outlined with icon and arrow)
+                    OutlinedButton(
+                        onClick = onRegister,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(52.dp),
+                        shape = RoundedCornerShape(12.dp),
+                        border = BorderStroke(1.dp, Color(0xFF14523F)),
+                        colors = ButtonDefaults.outlinedButtonColors(contentColor = Color(0xFF14523F)),
+                        enabled = !isLoading
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.Center
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.PersonAdd,
+                                contentDescription = null,
+                                tint = Color(0xFF14523F),
+                                modifier = Modifier.size(20.dp)
+                            )
+                            Spacer(Modifier.width(8.dp))
+                            Text(
+                                text = "নতুন অ্যাকাউন্ট খুলুন",
+                                color = Color(0xFF14523F),
+                                fontSize = 15.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                            Spacer(Modifier.width(6.dp))
+                            Icon(
+                                imageVector = Icons.AutoMirrored.Filled.ArrowForward,
+                                contentDescription = null,
+                                tint = Color(0xFF14523F),
+                                modifier = Modifier.size(16.dp)
+                            )
+                        }
+                    }
                 }
+            }
+
+            Spacer(Modifier.height(20.dp))
+
+            // Footer Motif and Motto
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.Center,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = "۞  ",
+                    color = Color(0xFFD4AF37),
+                    fontSize = 14.sp
+                )
+                Text(
+                    text = "দ্বীনের খেদমতে একসাথে",
+                    color = Color(0xFFB5D4CA),
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.Medium
+                )
+                Text(
+                    text = "  ۞",
+                    color = Color(0xFFD4AF37),
+                    fontSize = 14.sp
+                )
             }
         }
     }
@@ -683,516 +1073,8 @@ fun IslamicRegisterScreen(navController: NavController, onLogin: () -> Unit) {
     }
 }
 
-@Composable
-fun InfoCard(text: String, containerColor: Color, textColor: Color, modifier: Modifier = Modifier) {
-    Card(
-        modifier = modifier, 
-        colors = CardDefaults.cardColors(containerColor = containerColor),
-        shape = RoundedCornerShape(16.dp)
-    ) {
-        Box(modifier = Modifier.padding(24.dp), contentAlignment = Alignment.Center) {
-            Text(text = text, fontWeight = FontWeight.Bold, color = textColor)
-        }
-    }
-}
 
-@Composable
-fun GlassCard(
-    modifier: Modifier = Modifier,
-    content: @Composable ColumnScope.() -> Unit
-) {
-    Card(
-        modifier = modifier
-            .fillMaxWidth()
-            .padding(horizontal = 4.dp)
-            .graphicsLayer {
-                shape = RoundedCornerShape(24.dp)
-                clip = true
-            }
-            .border(
-                BorderStroke(1.dp, Color.White.copy(alpha = 0.4f)),
-                RoundedCornerShape(24.dp)
-            ),
-        shape = RoundedCornerShape(24.dp),
-        colors = CardDefaults.cardColors(
-            containerColor = Color.White.copy(alpha = 0.3f)
-        ),
-        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
-        content = { Column(modifier = Modifier.padding(20.dp), content = content) }
-    )
-}
 
-@Composable
-fun DateCard(modifier: Modifier = Modifier) {
-    val dateInfo = remember { DateUtils.getCurrentDateInfo() }
-    
-    // Premium distinct Card for Date section with rich Islamic green styling for crystal-clear readability
-    Card(
-        modifier = modifier
-            .fillMaxWidth()
-            .padding(horizontal = 4.dp, vertical = 2.dp)
-            .shadow(6.dp, RoundedCornerShape(18.dp)),
-        shape = RoundedCornerShape(18.dp),
-        colors = CardDefaults.cardColors(containerColor = Color(0xFF0F4C3A)),
-        border = BorderStroke(1.dp, MutedGold.copy(alpha = 0.7f))
-    ) {
-        Row(
-            modifier = Modifier.padding(14.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Surface(
-                shape = CircleShape,
-                color = MutedGold.copy(alpha = 0.2f),
-                modifier = Modifier.size(46.dp)
-            ) {
-                Icon(
-                    Icons.Outlined.DateRange, 
-                    contentDescription = null, 
-                    tint = MutedGold, 
-                    modifier = Modifier.padding(10.dp)
-                )
-            }
-            Spacer(modifier = Modifier.width(14.dp))
-            Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                // 1. Arabic / Hijri Date (First)
-                Text(
-                    text = dateInfo.hijriDate, 
-                    style = MaterialTheme.typography.titleSmall,
-                    color = MutedGold,
-                    fontWeight = FontWeight.Bold
-                )
-                // 2. Bengali Date (Second)
-                Text(
-                    text = dateInfo.bengaliDate, 
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = Color.White,
-                    fontWeight = FontWeight.SemiBold
-                )
-                // 3. English Date & Weekday (Third)
-                Text(
-                    text = "${dateInfo.englishDate} • ${dateInfo.weekday}", 
-                    style = MaterialTheme.typography.bodySmall,
-                    color = Color(0xFFB2DFDB)
-                )
-            }
-        }
-    }
-}
-
-@Composable
-fun PrayerTimesSection(modifier: Modifier = Modifier) {
-    var prayerTimes by remember { mutableStateOf<List<PrayerTime>>(emptyList()) }
-    var isLoading by remember { mutableStateOf(true) }
-    var errorMessage by remember { mutableStateOf<String?>(null) }
-    val scope = rememberCoroutineScope()
-
-    LaunchedEffect(Unit) {
-        scope.launch {
-            try {
-                prayerTimes = PrayerTimeManager.getPrayerTimes("Dhaka")
-                isLoading = false
-            } catch (e: Exception) {
-                errorMessage = "সময়সূচী লোড করা যায়নি"
-                isLoading = false
-            }
-        }
-    }
-    
-    // 3D Depth Card for Prayer Times with rich dark green gradient/container and strong shadow
-    Card(
-        modifier = modifier
-            .fillMaxWidth()
-            .padding(horizontal = 4.dp)
-            .shadow(10.dp, RoundedCornerShape(20.dp)),
-        shape = RoundedCornerShape(20.dp),
-        colors = CardDefaults.cardColors(containerColor = Color(0xFF082B22)),
-        border = BorderStroke(1.5.dp, MutedGold.copy(alpha = 0.6f))
-    ) {
-        val cal = remember { Calendar.getInstance() }
-        val currentMinutesTotal = cal.get(Calendar.HOUR_OF_DAY) * 60 + cal.get(Calendar.MINUTE)
-        
-        fun parseMinutes(timeStr: String): Int {
-            return try {
-                val parts = timeStr.trim().take(5).split(":")
-                val h = parts[0].toInt()
-                val m = parts[1].toInt()
-                h * 60 + m
-            } catch (_: Exception) {
-                0
-            }
-        }
-
-        val activePrayerIndex = prayerTimes.indexOfLast { 
-            parseMinutes(it.start) <= currentMinutesTotal 
-        }
-        val nextPrayer = if (activePrayerIndex != -1 && activePrayerIndex < prayerTimes.size - 1) prayerTimes[activePrayerIndex + 1] else prayerTimes.firstOrNull()
-
-        Column(modifier = Modifier.padding(14.dp)) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically, 
-                horizontalArrangement = Arrangement.SpaceBetween, 
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(Icons.Outlined.AccessTime, contentDescription = null, tint = MutedGold, modifier = Modifier.size(18.dp))
-                    Spacer(modifier = Modifier.width(6.dp))
-                    Text("নামাজের সময়সূচী", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold, color = Color.White)
-                }
-                nextPrayer?.let {
-                    Surface(shape = RoundedCornerShape(6.dp), color = MutedGold) {
-                        Text("পরবর্তী: ${it.name}", style = MaterialTheme.typography.labelSmall, modifier = Modifier.padding(6.dp, 2.dp), color = Color(0xFF082B22), fontWeight = FontWeight.Bold)
-                    }
-                }
-            }
-            Spacer(modifier = Modifier.height(10.dp))
-            
-            if (isLoading) {
-                CircularProgressIndicator(modifier = Modifier.align(Alignment.CenterHorizontally).size(24.dp), color = MutedGold)
-            } else if (errorMessage != null) {
-                Text(errorMessage!!, color = Color.Red, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
-            } else {
-                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    prayerTimes.forEachIndexed { index, prayer ->
-                        val isActive = index == activePrayerIndex
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .background(
-                                    if (isActive) MutedGold.copy(alpha = 0.25f) else Color.White.copy(alpha = 0.05f),
-                                    shape = RoundedCornerShape(8.dp)
-                                )
-                                .border(
-                                    BorderStroke(0.5.dp, if (isActive) MutedGold else Color.Transparent),
-                                    shape = RoundedCornerShape(8.dp)
-                                )
-                                .padding(horizontal = 10.dp, vertical = 6.dp),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Text(
-                                prayer.name, 
-                                style = MaterialTheme.typography.bodyMedium, 
-                                fontWeight = FontWeight.Bold, 
-                                color = if (isActive) Color(0xFFFFD700) else Color.White
-                            )
-                            Row(
-                                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                 // Start time chip
-                                Surface(
-                                    shape = RoundedCornerShape(4.dp),
-                                    color = Color.Black.copy(alpha = 0.3f)
-                                ) {
-                                    Text(
-                                        "শুরু: ${DateUtils.formatTimeTo12Hour(prayer.start)}", 
-                                        style = MaterialTheme.typography.bodySmall, 
-                                        color = Color(0xFFE0F2F1),
-                                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
-                                    )
-                                }
-                                // End time chip with high-contrast background so yellow pops out perfectly
-                                Surface(
-                                    shape = RoundedCornerShape(4.dp),
-                                    color = Color.Black.copy(alpha = 0.5f)
-                                ) {
-                                    Text(
-                                        "শেষ: ${DateUtils.formatTimeTo12Hour(prayer.end)}", 
-                                        style = MaterialTheme.typography.bodySmall, 
-                                        color = Color(0xFFFFD700), // Brilliant Gold/Yellow that pops out
-                                        fontWeight = FontWeight.Bold,
-                                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
-                                    )
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
-}
-
-@Composable
-fun AajkerShoronCard(modifier: Modifier = Modifier) {
-    Card(
-        modifier = modifier
-            .fillMaxWidth()
-            .padding(horizontal = 4.dp, vertical = 2.dp)
-            .shadow(6.dp, RoundedCornerShape(16.dp)),
-        shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.cardColors(containerColor = Color(0xFFF1F8E9)), // Soft botanical light green tint
-        border = BorderStroke(1.2.dp, MutedGold.copy(alpha = 0.8f))
-    ) {
-        Column(
-            modifier = Modifier.padding(12.dp),
-            horizontalAlignment = Alignment.CenterHorizontally
-        ) {
-            // Floral decorated header
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.Center,
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Icon(
-                    Icons.Default.LocalFlorist,
-                    contentDescription = null,
-                    tint = Color(0xFF2E7D32), // Floral green
-                    modifier = Modifier.size(16.dp)
-                )
-                Spacer(modifier = Modifier.width(6.dp))
-                Text(
-                    "আজকের স্মরণ", 
-                    style = MaterialTheme.typography.titleSmall, 
-                    fontWeight = FontWeight.Bold, 
-                    color = DeepEmerald,
-                    textAlign = TextAlign.Center
-                )
-                Spacer(modifier = Modifier.width(6.dp))
-                Icon(
-                    Icons.Default.LocalFlorist,
-                    contentDescription = null,
-                    tint = Color(0xFF2E7D32),
-                    modifier = Modifier.size(16.dp)
-                )
-            }
-            Spacer(modifier = Modifier.height(4.dp))
-            
-            // Main inspiring text
-            Text(
-                "আপনি কি আজ প্রিয় নবী হযরত মুহাম্মদ সাল্লাল্লাহু আলাইহি ওয়াসাল্লাম-এর ওপর দরুদ পাঠ করেছেন?",
-                style = MaterialTheme.typography.bodyMedium,
-                color = Color(0xFF1B382B),
-                fontWeight = FontWeight.Medium,
-                textAlign = TextAlign.Center,
-                lineHeight = 20.sp
-            )
-            
-            Spacer(modifier = Modifier.height(6.dp))
-            
-            // Darood box with floral/gold styling
-            Surface(
-                shape = RoundedCornerShape(10.dp),
-                color = Color.White,
-                border = BorderStroke(0.8.dp, MutedGold.copy(alpha = 0.6f)),
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Column(
-                    modifier = Modifier.padding(10.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally
-                ) {
-                    Text(
-                        "“আল্লাহুম্মা সাল্লি আলা মুহাম্মাদিও ওয়া আলা আলি মুহাম্মাদ, সাল্লাল্লাহু আলাইহি ওয়াসাল্লাম”",
-                        style = MaterialTheme.typography.bodySmall,
-                        fontWeight = FontWeight.Bold,
-                        fontStyle = androidx.compose.ui.text.font.FontStyle.Italic,
-                        color = ElegantGreen,
-                        textAlign = TextAlign.Center,
-                        lineHeight = 18.sp
-                    )
-                }
-            }
-        }
-    }
-}
-
-@Composable
-fun GreetingCard(greetingName: String?) {
-    Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 4.dp, vertical = 2.dp)
-            .shadow(4.dp, RoundedCornerShape(16.dp)),
-        shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.cardColors(containerColor = Color(0xFF14523F)), // ElegantGreen
-        border = BorderStroke(1.dp, MutedGold.copy(alpha = 0.5f))
-    ) {
-        Column(
-            modifier = Modifier.padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(4.dp)
-        ) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Text(
-                    text = "আসসালামু আলাইকুম, ",
-                    style = MaterialTheme.typography.titleMedium,
-                    color = Color(0xFFD9B66F) // MutedGold
-                )
-                Text(
-                    text = greetingName ?: "সম্মানিত ব্যবহারকারী",
-                    style = MaterialTheme.typography.titleMedium,
-                    color = Color.White,
-                    fontWeight = FontWeight.Bold,
-                    maxLines = 1
-                )
-            }
-            Text(
-                text = "কওমি কর্মসংস্থান প্ল্যাটফর্মে আপনাকে স্বাগতম।",
-                style = MaterialTheme.typography.bodySmall,
-                color = Color(0xFFB2DFDB)
-            )
-        }
-    }
-}
-
-@Composable
-fun AnimatedHeaderBanner(onOpenDrawer: () -> Unit) {
-    val infiniteTransition = rememberInfiniteTransition(label = "header_live_glow")
-    
-    val primaryColor by infiniteTransition.animateColor(
-        initialValue = Color(0xFFD9B66F), // Gold
-        targetValue = Color(0xFF4CAF50), // Green
-        animationSpec = infiniteRepeatable(
-            animation = tween(1500, easing = LinearEasing),
-            repeatMode = RepeatMode.Reverse
-        ),
-        label = "primary_color"
-    )
-
-    val secondaryColor by infiniteTransition.animateColor(
-        initialValue = Color(0xFFFFEB3B), // Bright Yellow
-        targetValue = Color(0xFF00E676), // Vibrant Mint Green
-        animationSpec = infiniteRepeatable(
-            animation = tween(1000, easing = LinearEasing),
-            repeatMode = RepeatMode.Reverse
-        ),
-        label = "secondary_color"
-    )
-
-    val borderWidth by infiniteTransition.animateFloat(
-        initialValue = 1.5f,
-        targetValue = 3.5f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(800, easing = LinearEasing),
-            repeatMode = RepeatMode.Reverse
-        ),
-        label = "border_width"
-    )
-
-    Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(vertical = 4.dp)
-            .shadow(8.dp, RoundedCornerShape(18.dp)),
-        shape = RoundedCornerShape(18.dp),
-        colors = CardDefaults.cardColors(containerColor = Color(0xFF082B22)),
-        border = BorderStroke(borderWidth.dp, secondaryColor)
-    ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 10.dp, vertical = 12.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.SpaceBetween
-        ) {
-            IconButton(onClick = onOpenDrawer) {
-                Icon(Icons.Default.Menu, contentDescription = "মেনু", tint = Color.White)
-            }
-            
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.Center
-            ) {
-                Icon(
-                    Icons.Default.LocalFlorist,
-                    contentDescription = null,
-                    tint = secondaryColor,
-                    modifier = Modifier.size(18.dp)
-                )
-                Spacer(modifier = Modifier.width(6.dp))
-                Text(
-                    text = "🌸 কওমি কর্মসংস্থান 🌸",
-                    fontSize = 17.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = primaryColor,
-                    textAlign = TextAlign.Center
-                )
-                Spacer(modifier = Modifier.width(6.dp))
-                Icon(
-                    Icons.Default.LocalFlorist,
-                    contentDescription = null,
-                    tint = secondaryColor,
-                    modifier = Modifier.size(18.dp)
-                )
-            }
-
-            IconButton(onClick = { /* TODO: Notifications */ }) {
-                Icon(Icons.Default.Notifications, contentDescription = "নোটিফিকেশন", tint = Color.White)
-            }
-        }
-    }
-}
-
-@Composable
-fun HomeScreen(
-    navController: NavController,
-    onOpenDrawer: () -> Unit = {}
-) {
-    val context = androidx.compose.ui.platform.LocalContext.current
-    val auth = remember { FirebaseAuth.getInstance() }
-    val initialUser = auth.currentUser
-    val cachedName = remember(initialUser?.uid) {
-        val uid = initialUser?.uid
-        if (uid != null) {
-            val prefs = context.getSharedPreferences("user_prefs", android.content.Context.MODE_PRIVATE)
-            prefs.getString("name_$uid", null)
-        } else null
-    }
-    var greetingName by remember {
-        mutableStateOf(
-            initialUser?.displayName?.takeIf { it.isNotBlank() } ?: cachedName?.takeIf { it.isNotBlank() }
-        )
-    }
-
-    LaunchedEffect(Unit) {
-        initialUser?.reload()?.addOnCompleteListener {
-            val updatedUser = auth.currentUser
-            val freshName = updatedUser?.displayName?.takeIf { it.isNotBlank() }
-            if (freshName != null) {
-                greetingName = freshName
-            }
-        }
-    }
-
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(AppSession.backgroundColor)
-            .padding(horizontal = 16.dp, vertical = 10.dp)
-            .verticalScroll(rememberScrollState())
-    ) {
-        AnimatedHeaderBanner(onOpenDrawer)
-
-        Spacer(modifier = Modifier.height(10.dp))
-        DateCard()
-        Spacer(modifier = Modifier.height(16.dp))
-        GreetingCard(greetingName)
-        Spacer(modifier = Modifier.height(16.dp))
-        
-        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-            InfoCard(
-                text = "খেদমত খুঁজুন",
-                containerColor = DarkGreenBox,
-                textColor = White,
-                modifier = Modifier.weight(1f).clickable { navController.navigate("search_khedmot") }
-            )
-            InfoCard(
-                text = "নিয়োগ প্রকাশ",
-                containerColor = GoldBox,
-                textColor = IslamicGreen,
-                modifier = Modifier.weight(1f).clickable { navController.navigate("post_niyog") }
-            )
-        }
-
-        Spacer(modifier = Modifier.height(16.dp))
-        PrayerTimesSection()
-        Spacer(modifier = Modifier.height(16.dp))
-        AajkerShoronCard()
-        Spacer(modifier = Modifier.height(16.dp))
-    }
-}
 
 @Composable
 fun ProfileScreen(navController: NavController) {

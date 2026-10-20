@@ -1,0 +1,137 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="120dp"
+    android:height="100dp"
+    android:viewportWidth="120"
+    android:viewportHeight="100">
+
+    <!-- Ground / Base -->
+    <path
+        android:fillColor="#2D6A4F"
+        android:pathData="M10,92 H110 V96 H10 Z" />
+
+    <!-- Main Building Base -->
+    <path
+        android:fillColor="#D8F3DC"
+        android:pathData="M35,62 H85 V92 H35 Z" />
+
+    <!-- Main Building Wall Shadow/Border -->
+    <path
+        android:strokeColor="#2D6A4F"
+        android:strokeWidth="1.2"
+        android:fillColor="#E8F5E9"
+        android:pathData="M35,62 H85 V92 H35 Z" />
+
+    <!-- Arched Main Door -->
+    <path
+        android:fillColor="#1B4332"
+        android:pathData="M52,92 V76 C52,71 68,71 68,76 V92 Z" />
+
+    <!-- Door Arch Highlight -->
+    <path
+        android:strokeColor="#D4AF37"
+        android:strokeWidth="1"
+        android:fillColor="#00000000"
+        android:pathData="M52,92 V76 C52,71 68,71 68,76 V92" />
+
+    <!-- Side Arched Windows -->
+    <path
+        android:fillColor="#2D6A4F"
+        android:pathData="M40,84 V74 C40,71 46,71 46,74 V84 Z" />
+    <path
+        android:fillColor="#2D6A4F"
+        android:pathData="M74,84 V74 C74,71 80,71 80,74 V84 Z" />
+
+    <!-- Roof Trim -->
+    <path
+        android:fillColor="#2D6A4F"
+        android:pathData="M32,60 H88 V63 H32 Z" />
+
+    <!-- Central Big Dome -->
+    <!-- Dome Base -->
+    <path
+        android:fillColor="#1B4332"
+        android:pathData="M45,60 H75 V54 H45 Z" />
+    <!-- Dome Curve -->
+    <path
+        android:fillColor="#2D6A4F"
+        android:pathData="M45,54 C45,35 60,25 60,25 C60,25 75,35 75,54 Z" />
+
+    <!-- Dome Finial / Crescent -->
+    <path
+        android:strokeColor="#D4AF37"
+        android:strokeWidth="1.5"
+        android:pathData="M60,25 V16" />
+    <path
+        android:fillColor="#D4AF37"
+        android:pathData="M60,15 C62.5,15 64,13 64,11 C64,9 62.5,7 60,7 C61.5,8.5 61.5,13.5 60,15 Z" />
+
+    <!-- Left Minaret -->
+    <path
+        android:fillColor="#D8F3DC"
+        android:strokeColor="#2D6A4F"
+        android:strokeWidth="1"
+        android:pathData="M20,40 H28 V92 H20 Z" />
+    <path
+        android:fillColor="#1B4332"
+        android:pathData="M18,40 H30 V43 H18 Z" />
+    <path
+        android:fillColor="#2D6A4F"
+        android:pathData="M20,40 C20,28 24,22 24,22 C24,22 28,28 28,40 Z" />
+    <path
+        android:strokeColor="#D4AF37"
+        android:strokeWidth="1"
+        android:pathData="M24,22 V17" />
+    <!-- Small window in left minaret -->
+    <path
+        android:fillColor="#1B4332"
+        android:pathData="M22,58 V52 C22,50 26,50 26,52 V58 Z" />
+    <path
+        android:fillColor="#1B4332"
+        android:pathData="M22,76 V70 C22,68 26,68 26,70 V76 Z" />
+
+    <!-- Right Minaret -->
+    <path
+        android:fillColor="#D8F3DC"
+        android:strokeColor="#2D6A4F"
+        android:strokeWidth="1"
+        android:pathData="M92,40 H100 V92 H92 Z" />
+    <path
+        android:fillColor="#1B4332"
+        android:pathData="M90,40 H102 V43 H90 Z" />
+    <path
+        android:fillColor="#2D6A4F"
+        android:pathData="M92,40 C92,28 96,22 96,22 C96,22 100,28 100,40 Z" />
+    <path
+        android:strokeColor="#D4AF37"
+        android:strokeWidth="1"
+        android:pathData="M96,22 V17" />
+    <!-- Small window in right minaret -->
+    <path
+        android:fillColor="#1B4332"
+        android:pathData="M94,58 V52 C94,50 98,50 98,52 V58 Z" />
+    <path
+        android:fillColor="#1B4332"
+        android:pathData="M94,76 V70 C94,68 98,68 98,70 V76 Z" />
+
+    <!-- Small side domes -->
+    <path
+        android:fillColor="#52B788"
+        android:pathData="M32,60 C32,50 38,46 38,46 C38,46 44,50 44,60 Z" />
+    <path
+        android:fillColor="#52B788"
+        android:pathData="M76,60 C76,50 82,46 82,46 C82,46 88,50 88,60 Z" />
+
+    <!-- Decorative green bushes at base -->
+    <path
+        android:fillColor="#40916C"
+        android:pathData="M12,92 C12,87 18,87 20,92 Z" />
+    <path
+        android:fillColor="#2D6A4F"
+        android:pathData="M100,92 C100,86 106,86 108,92 Z" />
+    <path
+        android:fillColor="#74C69D"
+        android:pathData="M28,92 C28,88 34,88 36,92 Z" />
+    <path
+        android:fillColor="#52B788"
+        android:pathData="M84,92 C84,87 90,87 92,92 Z" />
+</vector>
