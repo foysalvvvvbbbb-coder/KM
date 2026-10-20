@@ -37,6 +37,8 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import android.content.ContextWrapper
+import android.widget.Toast
 import androidx.credentials.CredentialManager
 import androidx.credentials.CustomCredential
 import androidx.credentials.GetCredentialRequest
@@ -172,7 +174,19 @@ fun getAuthErrorMessage(exception: Exception?): String {
         is com.google.firebase.auth.FirebaseAuthUserCollisionException -> "এই ইমেইলটি দিয়ে ইতিমধ্যে অ্যাকাউন্ট খোলা আছে।"
         is com.google.firebase.FirebaseNetworkException -> "ইন্টারনেট সংযোগ নেই বা সার্ভারের সাথে যোগাযোগ করা যাচ্ছে না।"
         is com.google.firebase.FirebaseTooManyRequestsException -> "অতিরিক্ত ভুল চেষ্টার কারণে সাময়িকভাবে ব্লক করা হয়েছে। কিছুক্ষণ পর চেষ্টা করুন।"
-        is com.google.firebase.auth.FirebaseAuthException -> "প্রমাণীকরণ ত্রুটি: ${exception.localizedMessage ?: exception.errorCode}"
+        is com.google.firebase.auth.FirebaseAuthException -> {
+            when (exception.errorCode) {
+                "ERROR_OPERATION_NOT_ALLOWED" ->
+                    "Firebase Console-এ Google Sign-In সক্রিয় করা নেই। Firebase Console > Authentication > Sign-in method-এ গিয়ে Google সক্রিয় করুন।"
+                "ERROR_INVALID_CREDENTIAL" ->
+                    "গুগল প্রমাণপত্রটি সঠিক নয় বা মেয়াদ শেষ হয়ে গেছে।"
+                "ERROR_USER_DISABLED" ->
+                    "এই অ্যাকাউন্টটি নিষ্ক্রিয় করা হয়েছে।"
+                "ERROR_ACCOUNT_EXISTS_WITH_DIFFERENT_CREDENTIAL" ->
+                    "এই ইমেইল দিয়ে ইতিমধ্যে অন্য পদ্ধতিতে অ্যাকাউন্ট খোলা রয়েছে।"
+                else -> "প্রমাণীকরণ ত্রুটি (${exception.errorCode}): ${exception.localizedMessage ?: ""}"
+            }
+        }
         else -> "সমস্যা: ${exception.localizedMessage ?: exception.message ?: "অজ্ঞাত ত্রুটি"}"
     }
 }
@@ -201,24 +215,40 @@ fun getPasswordResetErrorMessage(exception: Exception?): String {
 fun getGoogleSignInErrorMessage(exception: Exception?): String {
     if (exception == null) return "গুগল সাইন-ইন সম্পন্ন করা যায়নি।"
     if (exception is GetCredentialCancellationException) {
-        return "গুগল লগইন বাতিল করা হয়েছে।"
+        return ""
     }
     if (exception is NoCredentialException) {
         return "ডিভাইসে কোনো গুগল অ্যাকাউন্ট পাওয়া যায়নি। অনুগ্রহ করে ডিভাইসে গুগল অ্যাকাউন্ট যোগ করুন।"
     }
     val msg = exception.localizedMessage ?: exception.message ?: ""
+    val type = if (exception is GetCredentialException) exception.type else ""
+
+    if (msg.contains("cancel", ignoreCase = true) ||
+        type.contains("cancellation", ignoreCase = true) ||
+        msg.contains("16:")
+    ) {
+        return ""
+    }
+
     return when {
-        msg.contains("16:") || msg.contains("DEVELOPER_ERROR") ->
-            "গুগল সাইন-ইন কনফিগারেশন ত্রুটি। Firebase Console-এ SHA-1 ফিঙ্গারপ্রিন্ট ও Web Client ID সক্রিয় করুন।"
         msg.contains("10:") || msg.contains("DEVELOPER_ERROR") ->
-            "গুগল কনফিগারেশন মিসম্যাচ। SHA-1 ও Package Name যাচাই করুন।"
+            "গুগল কনফিগারেশন মিসম্যাচ (DEVELOPER_ERROR 10)। Firebase Console-এ SHA-1 ও SHA-256 ফিঙ্গারপ্রিন্ট যোগ করুন এবং Google Sign-In সক্রিয় করুন।"
         msg.contains("7:") || msg.contains("NETWORK_ERROR") ->
             "ইন্টারনেট সংযোগ নেই বা সার্ভারের সাথে যোগাযোগ করা যাচ্ছে না।"
-        msg.contains("Canceled", ignoreCase = true) || msg.contains("cancelled", ignoreCase = true) ->
-            "গুগল লগইন বাতিল করা হয়েছে।"
+        msg.contains("12500") || msg.contains("SIGN_IN_FAILED") ->
+            "গুগল সাইন-ইন ব্যর্থ হয়েছে (Code 12500)। Firebase Console-এ Support Email ও Google Provider সক্রিয় করুন।"
         else ->
             "গুগল লগইন সম্পন্ন করা যায়নি: ${msg.ifBlank { "অজ্ঞাত ত্রুটি" }}"
     }
+}
+
+fun android.content.Context.findActivity(): ComponentActivity? {
+    var ctx = this
+    while (ctx is ContextWrapper) {
+        if (ctx is ComponentActivity) return ctx
+        ctx = ctx.baseContext
+    }
+    return null
 }
 
 fun resolveGoogleWebClientId(context: android.content.Context): String {
@@ -428,7 +458,9 @@ fun IslamicLoginScreen(navController: NavController, onRegister: () -> Unit) {
                         if (isLoading || isGoogleLoading) return@OutlinedButton
                         val webClientId = resolveGoogleWebClientId(context)
                         if (webClientId.isBlank()) {
-                            error = "গুগল লগইন চালুর জন্য Firebase Console-এ Google Provider সক্রিয় করে Web Client ID সেট করুন।"
+                            val msg = "গুগল লগইন চালুর জন্য Firebase Console-এ Google Provider সক্রিয় করে Web Client ID সেট করুন।"
+                            error = msg
+                            Toast.makeText(context, msg, Toast.LENGTH_LONG).show()
                             showGoogleHelpDialog = true
                             return@OutlinedButton
                         }
@@ -438,7 +470,8 @@ fun IslamicLoginScreen(navController: NavController, onRegister: () -> Unit) {
 
                         coroutineScope.launch {
                             try {
-                                val credentialManager = CredentialManager.create(context)
+                                val targetContext = context.findActivity() ?: context
+                                val credentialManager = CredentialManager.create(targetContext)
                                 val googleIdOption = GetSignInWithGoogleOption.Builder(webClientId)
                                     .build()
 
@@ -446,17 +479,40 @@ fun IslamicLoginScreen(navController: NavController, onRegister: () -> Unit) {
                                     .addCredentialOption(googleIdOption)
                                     .build()
 
+                                android.util.Log.d("AuthDebug", "Requesting Google credentials via CredentialManager...")
                                 val result = credentialManager.getCredential(
-                                    context = context,
+                                    context = targetContext,
                                     request = request
                                 )
 
                                 val credential = result.credential
-                                if (credential is CustomCredential &&
-                                    credential.type == GoogleIdTokenCredential.TYPE_GOOGLE_ID_TOKEN_CREDENTIAL
-                                ) {
-                                    val googleIdTokenCredential = GoogleIdTokenCredential.createFrom(credential.data)
-                                    val idToken = googleIdTokenCredential.idToken
+                                android.util.Log.d("AuthDebug", "Credential received: ${credential::class.java.simpleName}, type: ${credential.type}")
+
+                                val idToken: String? = when {
+                                    credential is CustomCredential &&
+                                        credential.type == GoogleIdTokenCredential.TYPE_GOOGLE_ID_TOKEN_CREDENTIAL -> {
+                                        try {
+                                            val googleIdTokenCredential = GoogleIdTokenCredential.createFrom(credential.data)
+                                            googleIdTokenCredential.idToken
+                                        } catch (e: Exception) {
+                                            android.util.Log.e("AuthDebug", "Error parsing GoogleIdTokenCredential", e)
+                                            null
+                                        }
+                                    }
+                                    else -> {
+                                        android.util.Log.e("AuthDebug", "Unknown credential type: ${credential.type}")
+                                        null
+                                    }
+                                }
+
+                                if (idToken.isNullOrBlank()) {
+                                    isGoogleLoading = false
+                                    val tokenError = "গুগল আইডি টোকেন পাওয়া যায়নি।"
+                                    android.util.Log.e("AuthDebug", "Failed to retrieve Google ID token.")
+                                    error = tokenError
+                                    Toast.makeText(context, tokenError, Toast.LENGTH_LONG).show()
+                                } else {
+                                    android.util.Log.d("AuthDebug", "Google ID token obtained. Signing in with Firebase GoogleAuthProvider...")
                                     val authCredential = GoogleAuthProvider.getCredential(idToken, null)
 
                                     auth.signInWithCredential(authCredential)
@@ -464,7 +520,7 @@ fun IslamicLoginScreen(navController: NavController, onRegister: () -> Unit) {
                                             isGoogleLoading = false
                                             if (task.isSuccessful && auth.currentUser != null) {
                                                 val user = auth.currentUser
-                                                android.util.Log.d("AuthDebug", "Google Sign-In Success: ${user?.uid}")
+                                                android.util.Log.d("AuthDebug", "Firebase Google Sign-In SUCCESS: uid=${user?.uid}, email=${user?.email}")
                                                 val userDisplayName = user?.displayName
                                                 if (!userDisplayName.isNullOrBlank()) {
                                                     try {
@@ -472,42 +528,67 @@ fun IslamicLoginScreen(navController: NavController, onRegister: () -> Unit) {
                                                         user.uid.let { uid ->
                                                             prefs.edit().putString("name_$uid", userDisplayName).apply()
                                                         }
-                                                    } catch (_: Exception) {}
+                                                    } catch (e: Exception) {
+                                                        android.util.Log.w("AuthDebug", "Local user name caching failed", e)
+                                                    }
+                                                }
+                                                user?.reload()?.addOnCompleteListener {
+                                                    android.util.Log.d("AuthDebug", "Firebase user reload complete")
                                                 }
                                                 navController.navigate("home") {
                                                     popUpTo("auth") { inclusive = true }
                                                 }
                                             } else {
                                                 val ex = task.exception
-                                                android.util.Log.e("AuthDebug", "Google Firebase auth failed", ex)
-                                                error = "গুগল লগইন সম্পন্ন করা যায়নি: ${getAuthErrorMessage(ex)}"
+                                                val errorCode = (ex as? com.google.firebase.auth.FirebaseAuthException)?.errorCode ?: "UNKNOWN"
+                                                android.util.Log.e("AuthDebug", "Firebase Google auth failed. Code: $errorCode, message: ${ex?.message}", ex)
+                                                val errorMsg = "গুগল লগইন সম্পন্ন করা যায়নি: ${getAuthErrorMessage(ex)}"
+                                                error = errorMsg
+                                                Toast.makeText(context, errorMsg, Toast.LENGTH_LONG).show()
                                             }
                                         }
                                         .addOnFailureListener { ex ->
-                                            isGoogleLoading = false
-                                            android.util.Log.e("AuthDebug", "Google Firebase auth failure listener", ex)
-                                            error = "গুগল লগইন সম্পন্ন করা যায়নি: ${getAuthErrorMessage(ex)}"
+                                            if (isGoogleLoading) {
+                                                isGoogleLoading = false
+                                                val errorCode = (ex as? com.google.firebase.auth.FirebaseAuthException)?.errorCode ?: "UNKNOWN"
+                                                android.util.Log.e("AuthDebug", "Firebase Google auth onFailure. Code: $errorCode, message: ${ex.message}", ex)
+                                                val errorMsg = "গুগল লগইন সম্পন্ন করা যায়নি: ${getAuthErrorMessage(ex)}"
+                                                error = errorMsg
+                                                Toast.makeText(context, errorMsg, Toast.LENGTH_LONG).show()
+                                            }
                                         }
-                                } else {
-                                    isGoogleLoading = false
-                                    error = "গুগল প্রমাণপত্র পাওয়া যায়নি।"
                                 }
                             } catch (e: GetCredentialCancellationException) {
                                 isGoogleLoading = false
-                                android.util.Log.d("AuthDebug", "Google Sign-In canceled by user")
-                                error = "গুগল লগইন বাতিল করা হয়েছে।"
+                                android.util.Log.d("AuthDebug", "Google Sign-In cancelled by user")
+                                // Do NOT show error for user cancellation
                             } catch (e: NoCredentialException) {
                                 isGoogleLoading = false
-                                android.util.Log.e("AuthDebug", "No Google account found on device", e)
-                                error = "ডিভাইসে কোনো গুগল অ্যাকাউন্ট পাওয়া যায়নি। অনুগ্রহ করে ডিভাইসে গুগল অ্যাকাউন্ট যোগ করুন।"
+                                android.util.Log.e("AuthDebug", "No Google account on device", e)
+                                val msg = "ডিভাইসে কোনো গুগল অ্যাকাউন্ট পাওয়া যায়নি। অনুগ্রহ করে ডিভাইসে গুগল অ্যাকাউন্ট যোগ করুন।"
+                                error = msg
+                                Toast.makeText(context, msg, Toast.LENGTH_LONG).show()
                             } catch (e: GetCredentialException) {
                                 isGoogleLoading = false
-                                android.util.Log.e("AuthDebug", "Google Sign-In GetCredentialException", e)
-                                error = getGoogleSignInErrorMessage(e)
+                                val errMsg = getGoogleSignInErrorMessage(e)
+                                if (errMsg.isNotBlank()) {
+                                    android.util.Log.e("AuthDebug", "Google Sign-In GetCredentialException: type=${e.type}, message=${e.message}", e)
+                                    error = errMsg
+                                    Toast.makeText(context, errMsg, Toast.LENGTH_LONG).show()
+                                } else {
+                                    android.util.Log.d("AuthDebug", "Google Sign-In dismissed/cancelled by user (GetCredentialException)")
+                                }
                             } catch (e: Exception) {
                                 isGoogleLoading = false
-                                android.util.Log.e("AuthDebug", "Google Sign-In unexpected error", e)
-                                error = "গুগল লগইনে সমস্যা হয়েছে: ${e.localizedMessage ?: "অনুগ্রহ করে আবার চেষ্টা করুন।"}"
+                                val rawMsg = e.localizedMessage ?: e.message ?: ""
+                                if (rawMsg.contains("cancel", ignoreCase = true)) {
+                                    android.util.Log.d("AuthDebug", "Google Sign-In cancelled by user: $rawMsg")
+                                } else {
+                                    android.util.Log.e("AuthDebug", "Google Sign-In unexpected error: ${e::class.java.simpleName}, message: $rawMsg", e)
+                                    val errMsg = "গুগল লগইনে সমস্যা হয়েছে: ${rawMsg.ifBlank { "অনুগ্রহ করে আবার চেষ্টা করুন।" }}"
+                                    error = errMsg
+                                    Toast.makeText(context, errMsg, Toast.LENGTH_LONG).show()
+                                }
                             }
                         }
                     },
@@ -902,7 +983,7 @@ fun ProfileScreen(navController: NavController) {
             when {
                 !initialUser?.displayName.isNullOrBlank() -> initialUser?.displayName!!
                 !cachedName.isNullOrBlank() -> cachedName
-                else -> "নাম প্রদান করা হয়নি"
+                else -> "নাম পাওয়া যায়নি"
             }
         ) 
     }
@@ -930,6 +1011,8 @@ fun ProfileScreen(navController: NavController) {
                         }
                     } else if (!cachedName.isNullOrBlank()) {
                         displayName = cachedName
+                    } else {
+                        displayName = "নাম পাওয়া যায়নি"
                     }
                     email = refreshedUser.email ?: "লগইন করা নেই"
                     uid = refreshedUser.uid

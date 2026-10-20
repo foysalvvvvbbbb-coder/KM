@@ -121,12 +121,12 @@ class ExampleRobolectricTest {
     fun testGoogleSignInErrorMessageMapping() {
         val cancellationEx = androidx.credentials.exceptions.GetCredentialCancellationException("User canceled")
         val noCredEx = androidx.credentials.exceptions.NoCredentialException("No accounts found")
-        val devErrorEx = androidx.credentials.exceptions.GetCredentialCustomException("TYPE_ERROR", "16: DEVELOPER_ERROR")
+        val devErrorEx = androidx.credentials.exceptions.GetCredentialCustomException("TYPE_ERROR", "10: DEVELOPER_ERROR")
         val networkErrorEx = androidx.credentials.exceptions.GetCredentialCustomException("TYPE_ERROR", "7: NETWORK_ERROR")
 
-        assertEquals("গুগল লগইন বাতিল করা হয়েছে।", getGoogleSignInErrorMessage(cancellationEx))
+        assertEquals("", getGoogleSignInErrorMessage(cancellationEx))
         assertEquals("ডিভাইসে কোনো গুগল অ্যাকাউন্ট পাওয়া যায়নি। অনুগ্রহ করে ডিভাইসে গুগল অ্যাকাউন্ট যোগ করুন।", getGoogleSignInErrorMessage(noCredEx))
-        assertEquals("গুগল সাইন-ইন কনফিগারেশন ত্রুটি। Firebase Console-এ SHA-1 ফিঙ্গারপ্রিন্ট ও Web Client ID সক্রিয় করুন।", getGoogleSignInErrorMessage(devErrorEx))
+        assertEquals("গুগল কনফিগারেশন মিসম্যাচ (DEVELOPER_ERROR 10)। Firebase Console-এ SHA-1 ও SHA-256 ফিঙ্গারপ্রিন্ট যোগ করুন এবং Google Sign-In সক্রিয় করুন।", getGoogleSignInErrorMessage(devErrorEx))
         assertEquals("ইন্টারনেট সংযোগ নেই বা সার্ভারের সাথে যোগাযোগ করা যাচ্ছে না।", getGoogleSignInErrorMessage(networkErrorEx))
         assertEquals("গুগল সাইন-ইন সম্পন্ন করা যায়নি।", getGoogleSignInErrorMessage(null))
     }
