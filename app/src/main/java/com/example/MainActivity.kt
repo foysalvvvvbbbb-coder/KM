@@ -33,6 +33,7 @@ import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
@@ -87,6 +88,7 @@ class MainActivity : ComponentActivity() {
 @Composable
 fun AppNavigation() {
     val navController = rememberNavController()
+    val context = LocalContext.current
     val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
     val coroutineScope = rememberCoroutineScope()
     val auth = remember { FirebaseAuth.getInstance() }
@@ -102,137 +104,297 @@ fun AppNavigation() {
     val routes = listOf("home", "feed", "khedmot", "abedon", "madrasah")
     val currentRoute = navController.currentBackStackEntryAsState().value?.destination?.route
 
+    // Dialog states for sidebar items
+    var showSettingsDialog by remember { mutableStateOf(false) }
+    var showNotifSettingsDialog by remember { mutableStateOf(false) }
+    var showAboutDialog by remember { mutableStateOf(false) }
+    var showTermsDialog by remember { mutableStateOf(false) }
+    var showPrivacyDialog by remember { mutableStateOf(false) }
+    var showHelpDialog by remember { mutableStateOf(false) }
+    var showContactDialog by remember { mutableStateOf(false) }
+    var showFeedbackDialog by remember { mutableStateOf(false) }
+    var showLogoutConfirmDialog by remember { mutableStateOf(false) }
+
     ModalNavigationDrawer(
         drawerState = drawerState,
         gesturesEnabled = currentRoute in routes || currentRoute == "profile",
         drawerContent = {
             ModalDrawerSheet(
-                drawerContainerColor = WarmOffWhite,
-                modifier = Modifier.widthIn(max = 300.dp)
+                drawerContainerColor = Color(0xFFF7F8F1),
+                modifier = Modifier.widthIn(max = 320.dp)
             ) {
-                Box(
+                Column(
                     modifier = Modifier
-                        .fillMaxWidth()
-                        .background(
-                            Brush.verticalGradient(listOf(DeepEmerald, ElegantGreen))
-                        )
-                        .padding(20.dp)
+                        .fillMaxHeight()
+                        .verticalScroll(rememberScrollState())
                 ) {
-                    Column {
-                        Icon(
-                            imageVector = Icons.Default.AccountCircle,
-                            contentDescription = "User Avatar",
-                            tint = MutedGold,
-                            modifier = Modifier.size(52.dp)
-                        )
-                        Spacer(Modifier.height(10.dp))
-                        Text(
-                            text = "কওমি কর্মসংস্থান বাংলাদেশ",
-                            color = Color.White,
-                            fontSize = 17.sp,
-                            fontWeight = FontWeight.Bold
-                        )
-                        Spacer(Modifier.height(2.dp))
-                        Text(
-                            text = currentUser?.displayName?.takeIf { it.isNotBlank() }
-                                ?: currentUser?.email
-                                ?: "খেদমতের বিশ্বস্ত প্ল্যাটফর্ম",
-                            color = MutedGold,
-                            fontSize = 13.sp
-                        )
-                    }
-                }
-
-                Spacer(Modifier.height(12.dp))
-
-                NavigationDrawerItem(
-                    icon = { Icon(Icons.Default.Home, contentDescription = "হোম", tint = ElegantGreen) },
-                    label = { Text("হোম", fontWeight = FontWeight.Medium) },
-                    selected = currentRoute == "home",
-                    onClick = {
-                        coroutineScope.launch { drawerState.close() }
-                        if (currentRoute != "home") {
-                            navController.navigate("home") { popUpTo("home") { inclusive = false } }
+                    // 1. Header Section (Mint gradient, Lanterns, Mosque illustration, Profile)
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .background(
+                                Brush.verticalGradient(
+                                    colors = listOf(
+                                        Color(0xFFE1F6EF),
+                                        Color(0xFFD0F1E7)
+                                    )
+                                )
+                            )
+                            .padding(horizontal = 16.dp, vertical = 20.dp)
+                    ) {
+                        // Canvas background mosque silhouette & lanterns
+                        Canvas(modifier = Modifier.matchParentSize()) {
+                            val paint = androidx.compose.ui.graphics.Color(0xFF7ACAB2).copy(alpha = 0.25f)
+                            val path = androidx.compose.ui.graphics.Path().apply {
+                                moveTo(0f, size.height)
+                                lineTo(0f, size.height - 30f)
+                                quadraticTo(size.width * 0.5f, size.height - 60f, size.width, size.height - 30f)
+                                lineTo(size.width, size.height)
+                                close()
+                            }
+                            drawPath(path, paint)
                         }
-                    },
-                    modifier = Modifier.padding(NavigationDrawerItemDefaults.ItemPadding)
-                )
 
-                NavigationDrawerItem(
-                    icon = { Icon(Icons.Default.Article, contentDescription = "ফিড", tint = ElegantGreen) },
-                    label = { Text("ফিড", fontWeight = FontWeight.Medium) },
-                    selected = currentRoute == "feed",
-                    onClick = {
-                        coroutineScope.launch { drawerState.close() }
-                        navController.navigate("feed") { popUpTo("home") }
-                    },
-                    modifier = Modifier.padding(NavigationDrawerItemDefaults.ItemPadding)
-                )
+                        Column {
+                            // Hanging Lanterns Header Row
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.WbSunny,
+                                    contentDescription = "Lantern",
+                                    tint = Color(0xFF075747),
+                                    modifier = Modifier.size(24.dp)
+                                )
+                                Icon(
+                                    imageVector = Icons.Default.WbSunny,
+                                    contentDescription = "Lantern",
+                                    tint = Color(0xFF075747),
+                                    modifier = Modifier.size(24.dp)
+                                )
+                            }
 
-                NavigationDrawerItem(
-                    icon = { Icon(Icons.Default.Work, contentDescription = "খেদমত", tint = ElegantGreen) },
-                    label = { Text("খেদমত", fontWeight = FontWeight.Medium) },
-                    selected = currentRoute == "khedmot",
-                    onClick = {
-                        coroutineScope.launch { drawerState.close() }
-                        navController.navigate("khedmot") { popUpTo("home") }
-                    },
-                    modifier = Modifier.padding(NavigationDrawerItemDefaults.ItemPadding)
-                )
+                            Spacer(Modifier.height(8.dp))
 
-                NavigationDrawerItem(
-                    icon = { Icon(Icons.Default.Assignment, contentDescription = "আবেদন", tint = ElegantGreen) },
-                    label = { Text("আবেদন", fontWeight = FontWeight.Medium) },
-                    selected = currentRoute == "abedon",
-                    onClick = {
-                        coroutineScope.launch { drawerState.close() }
-                        navController.navigate("abedon") { popUpTo("home") }
-                    },
-                    modifier = Modifier.padding(NavigationDrawerItemDefaults.ItemPadding)
-                )
+                            // Profile Row
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable {
+                                        coroutineScope.launch { drawerState.close() }
+                                        navController.navigate("profile") { popUpTo("home") }
+                                    },
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(56.dp)
+                                        .clip(CircleShape)
+                                        .background(Color(0xFFC2E5D4))
+                                        .border(2.dp, Color(0xFF075747), CircleShape),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Person,
+                                        contentDescription = "Profile Avatar",
+                                        tint = Color(0xFF075747),
+                                        modifier = Modifier.size(32.dp)
+                                    )
+                                }
 
-                NavigationDrawerItem(
-                    icon = { Icon(Icons.Default.AccountBalance, contentDescription = "মাদ্রাসা", tint = ElegantGreen) },
-                    label = { Text("মাদ্রাসা", fontWeight = FontWeight.Medium) },
-                    selected = currentRoute == "madrasah",
-                    onClick = {
-                        coroutineScope.launch { drawerState.close() }
-                        navController.navigate("madrasah") { popUpTo("home") }
-                    },
-                    modifier = Modifier.padding(NavigationDrawerItemDefaults.ItemPadding)
-                )
+                                Spacer(Modifier.width(12.dp))
 
-                NavigationDrawerItem(
-                    icon = { Icon(Icons.Default.Person, contentDescription = "প্রোফাইল", tint = ElegantGreen) },
-                    label = { Text("প্রোফাইল", fontWeight = FontWeight.Medium) },
-                    selected = currentRoute == "profile",
-                    onClick = {
-                        coroutineScope.launch { drawerState.close() }
-                        navController.navigate("profile") { popUpTo("home") }
-                    },
-                    modifier = Modifier.padding(NavigationDrawerItemDefaults.ItemPadding)
-                )
-
-                HorizontalDivider(
-                    modifier = Modifier.padding(vertical = 12.dp, horizontal = 16.dp),
-                    color = Color.LightGray.copy(alpha = 0.5f)
-                )
-
-                NavigationDrawerItem(
-                    icon = { Icon(Icons.AutoMirrored.Filled.Logout, contentDescription = "লগআউট", tint = Color(0xFFB00020)) },
-                    label = { Text("লগআউট", color = Color(0xFFB00020), fontWeight = FontWeight.Bold) },
-                    selected = false,
-                    onClick = {
-                        coroutineScope.launch {
-                            drawerState.close()
-                            auth.signOut()
-                            navController.navigate("auth") {
-                                popUpTo(0) { inclusive = true }
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(
+                                        text = currentUser?.displayName?.takeIf { it.isNotBlank() } ?: "Foysal Ahmad",
+                                        color = Color(0xFF075747),
+                                        fontSize = 16.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        maxLines = 1
+                                    )
+                                    Spacer(Modifier.height(2.dp))
+                                    Text(
+                                        text = currentUser?.email ?: "foysal@example.com",
+                                        color = Color(0xFF477F73),
+                                        fontSize = 12.sp,
+                                        maxLines = 1
+                                    )
+                                    Spacer(Modifier.height(3.dp))
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Box(
+                                            modifier = Modifier
+                                                .size(7.dp)
+                                                .background(Color(0xFF2E7D32), CircleShape)
+                                        )
+                                        Spacer(Modifier.width(4.dp))
+                                        Text(
+                                            text = "অনলাইন",
+                                            color = Color(0xFF2E7D32),
+                                            fontSize = 11.sp,
+                                            fontWeight = FontWeight.Medium
+                                        )
+                                    }
+                                }
                             }
                         }
-                    },
-                    modifier = Modifier.padding(NavigationDrawerItemDefaults.ItemPadding)
-                )
+                    }
+
+                    Spacer(Modifier.height(4.dp))
+
+                    // 2. Menu Items List
+                    val menuItems = listOf(
+                        Triple("এডমিন প্যানেল", Icons.Default.AdminPanelSettings) {
+                            coroutineScope.launch { drawerState.close() }
+                            navController.navigate("admin_panel")
+                        },
+                        Triple("সেটিংস", Icons.Default.Settings) { showSettingsDialog = true },
+                        Triple("নোটিফিকেশন সেটিংস", Icons.Default.Notifications) { showNotifSettingsDialog = true },
+                        Triple("অ্যাপ সম্পর্কে", Icons.Default.Info) { showAboutDialog = true },
+                        Triple("নিয়মাবলি ও শর্তাবলি", Icons.Default.MenuBook) { showTermsDialog = true },
+                        Triple("গোপনীয়তা নীতি", Icons.Default.VerifiedUser) { showPrivacyDialog = true },
+                        Triple("সাহায্য ও সাধারণ প্রশ্নোত্তর", Icons.Default.HelpOutline) { showHelpDialog = true },
+                        Triple("যোগাযোগ ও সমস্যা জানান", Icons.Default.Chat) { showContactDialog = true },
+                        Triple("অ্যাপ শেয়ার করুন", Icons.Default.Share) {
+                            coroutineScope.launch { drawerState.close() }
+                            val sendIntent = android.content.Intent().apply {
+                                action = android.content.Intent.ACTION_SEND
+                                putExtra(android.content.Intent.EXTRA_TEXT, "কওমি কর্মসংস্থান বাংলাদেশ অ্যাপ: দ্বীনি খেদমতের বিশ্বস্ত প্ল্যাটফর্ম।")
+                                type = "text/plain"
+                            }
+                            val shareIntent = android.content.Intent.createChooser(sendIntent, null)
+                            context.startActivity(shareIntent)
+                        },
+                        Triple("মতামত দিন", Icons.Default.Star) { showFeedbackDialog = true }
+                    )
+
+                    menuItems.forEach { (title, icon, onClickAction) ->
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable(onClick = {
+                                    coroutineScope.launch { drawerState.close() }
+                                    onClickAction()
+                                })
+                                .padding(horizontal = 16.dp, vertical = 13.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .size(36.dp)
+                                    .clip(CircleShape)
+                                    .background(Color(0xFFE1F6EF)),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    imageVector = icon,
+                                    contentDescription = title,
+                                    tint = Color(0xFF075747),
+                                    modifier = Modifier.size(20.dp)
+                                )
+                            }
+                            Spacer(Modifier.width(14.dp))
+                            Text(
+                                text = title,
+                                color = Color(0xFF075747),
+                                fontSize = 14.sp,
+                                fontWeight = FontWeight.Medium,
+                                modifier = Modifier.weight(1f)
+                            )
+                            Icon(
+                                imageVector = Icons.Default.ChevronRight,
+                                contentDescription = null,
+                                tint = Color(0xFF477F73),
+                                modifier = Modifier.size(18.dp)
+                            )
+                        }
+                        HorizontalDivider(
+                            modifier = Modifier.padding(horizontal = 16.dp),
+                            color = Color(0xFFBFE6DA).copy(alpha = 0.6f)
+                        )
+                    }
+
+                    Spacer(Modifier.height(8.dp))
+
+                    // 3. Logout Item (Red)
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable {
+                                coroutineScope.launch { drawerState.close() }
+                                showLogoutConfirmDialog = true
+                            }
+                            .padding(horizontal = 16.dp, vertical = 14.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(36.dp)
+                                .clip(CircleShape)
+                                .background(Color(0xFFFDE8EA)),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                imageVector = Icons.AutoMirrored.Filled.Logout,
+                                contentDescription = "লগআউট",
+                                tint = Color(0xFFB4233A),
+                                modifier = Modifier.size(20.dp)
+                            )
+                        }
+                        Spacer(Modifier.width(14.dp))
+                        Text(
+                            text = "লগআউট",
+                            color = Color(0xFFB4233A),
+                            fontSize = 15.sp,
+                            fontWeight = FontWeight.Bold,
+                            modifier = Modifier.weight(1f)
+                        )
+                        Icon(
+                            imageVector = Icons.Default.ChevronRight,
+                            contentDescription = null,
+                            tint = Color(0xFFB4233A).copy(alpha = 0.7f),
+                            modifier = Modifier.size(18.dp)
+                        )
+                    }
+
+                    Spacer(Modifier.height(16.dp))
+
+                    // 4. Footer Section (Mint gradient, Motif, Slogan)
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .background(
+                                Brush.verticalGradient(
+                                    colors = listOf(
+                                        Color(0xFFD0F1E7),
+                                        Color(0xFFE1F6EF)
+                                    )
+                                )
+                            )
+                            .padding(vertical = 16.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.Center
+                            ) {
+                                HorizontalDivider(modifier = Modifier.width(40.dp), color = Color(0xFF075747))
+                                Spacer(Modifier.width(8.dp))
+                                Text("۞", color = Color(0xFF075747), fontSize = 16.sp)
+                                Spacer(Modifier.width(8.dp))
+                                HorizontalDivider(modifier = Modifier.width(40.dp), color = Color(0xFF075747))
+                            }
+                            Spacer(Modifier.height(6.dp))
+                            Text(
+                                text = "দ্বীনের খেদমতে একসাথে",
+                                color = Color(0xFF075747),
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                        }
+                    }
+                }
             }
         }
     ) {
@@ -346,8 +508,246 @@ fun AppNavigation() {
                         initialFilter = "নিয়োগ বিজ্ঞপ্তি"
                     ) 
                 }
+                composable("admin_panel") {
+                    AdminPanelScreen(
+                        onNavigateBack = { navController.popBackStack() }
+                    )
+                }
             }
         }
+    }
+
+    // Sidebar Dialogs
+    if (showSettingsDialog) {
+        AlertDialog(
+            onDismissRequest = { showSettingsDialog = false },
+            title = { Text("সেটিংস", fontWeight = FontWeight.Bold, color = Color(0xFF075747)) },
+            text = {
+                Column {
+                    Text("অ্যাপের সাধারণ সেটিংস ও পছন্দসমূহ:", fontSize = 14.sp, color = Color(0xFF477F73))
+                    Spacer(Modifier.height(12.dp))
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text("ডার্ক মোড (Dark Mode)")
+                        var darkTheme by remember { mutableStateOf(false) }
+                        Switch(checked = darkTheme, onCheckedChange = { darkTheme = it })
+                    }
+                    Spacer(Modifier.height(8.dp))
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text("ভাষা (Language)")
+                        Text("বাংলা (সক্রিয়)", fontWeight = FontWeight.Bold, color = Color(0xFF075747))
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { showSettingsDialog = false }) {
+                    Text("বন্ধ করুন", color = Color(0xFF075747), fontWeight = FontWeight.Bold)
+                }
+            }
+        )
+    }
+
+    if (showNotifSettingsDialog) {
+        AlertDialog(
+            onDismissRequest = { showNotifSettingsDialog = false },
+            title = { Text("নোটিফিকেশন সেটিংস", fontWeight = FontWeight.Bold, color = Color(0xFF075747)) },
+            text = {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text("সকল পুশ নোটিফিকেশন")
+                    var notifEnabled by remember { mutableStateOf(true) }
+                    Switch(checked = notifEnabled, onCheckedChange = { notifEnabled = it })
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { showNotifSettingsDialog = false }) {
+                    Text("ঠিক আছে", color = Color(0xFF075747), fontWeight = FontWeight.Bold)
+                }
+            }
+        )
+    }
+
+    if (showAboutDialog) {
+        AlertDialog(
+            onDismissRequest = { showAboutDialog = false },
+            title = { Text("অ্যাপ সম্পর্কে", fontWeight = FontWeight.Bold, color = Color(0xFF075747)) },
+            text = {
+                Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
+                    Text(
+                        text = "কওমি কর্মসংস্থান বাংলাদেশ হলো কওমি মাদ্রাসা ও খেদমতপ্রার্থীদের মধ্যে দ্বীনি খেদমতের সুযোগ ও যোগ্যতার সংযোগ তৈরির একটি বিশ্বস্ত ডিজিটাল মাধ্যম।",
+                        fontSize = 14.sp,
+                        color = Color(0xFF075747)
+                    )
+                    Spacer(Modifier.height(10.dp))
+                    Text(text = "সংস্করণ: ১.০.০", fontSize = 13.sp, color = Color(0xFF477F73), fontWeight = FontWeight.Medium)
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { showAboutDialog = false }) {
+                    Text("বন্ধ করুন", color = Color(0xFF075747), fontWeight = FontWeight.Bold)
+                }
+            }
+        )
+    }
+
+    if (showTermsDialog) {
+        AlertDialog(
+            onDismissRequest = { showTermsDialog = false },
+            title = { Text("নিয়মাবলি ও শর্তাবলি", fontWeight = FontWeight.Bold, color = Color(0xFF075747)) },
+            text = {
+                Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
+                    Text(
+                        text = "১. অ্যাপ ব্যবহারের সাধারণ নিয়ম মেনে চলতে হবে।\n" +
+                                "২. খেদমতের বিজ্ঞপ্তি ও আবেদন প্রকাশের ক্ষেত্রে সম্পূর্ণ সত্য ও নির্ভুল তথ্য প্রদান করতে হবে।\n" +
+                                "৩. ভুয়া বিজ্ঞপ্তি, হয়রানিমূলক পোস্ট বা প্রতারণা সম্পূর্ণ নিষিদ্ধ।\n" +
+                                "৪. ব্যবহারকারী তার নিজ অ্যাকাউন্টের নিরাপত্তা ও তথ্যের জন্য দায়ী থাকবেন।",
+                        fontSize = 13.sp,
+                        color = Color(0xFF075747)
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { showTermsDialog = false }) {
+                    Text("পড়েছি", color = Color(0xFF075747), fontWeight = FontWeight.Bold)
+                }
+            }
+        )
+    }
+
+    if (showPrivacyDialog) {
+        AlertDialog(
+            onDismissRequest = { showPrivacyDialog = false },
+            title = { Text("গোপনীয়তা নীতি", fontWeight = FontWeight.Bold, color = Color(0xFF075747)) },
+            text = {
+                Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
+                    Text(
+                        text = "আপনার ব্যক্তিগত তথ্য যেমন নাম, ইমেইল ও প্রোফাইল ডেটা সম্পূর্ণ নিরাপদে সংরক্ষিত হয়। আমরা আপনার অনুমতি ছাড়া কোনো তথ্য তৃতীয় পক্ষের সাথে শেয়ার করি না।",
+                        fontSize = 13.sp,
+                        color = Color(0xFF075747)
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { showPrivacyDialog = false }) {
+                    Text("বুঝেছি", color = Color(0xFF075747), fontWeight = FontWeight.Bold)
+                }
+            }
+        )
+    }
+
+    if (showHelpDialog) {
+        AlertDialog(
+            onDismissRequest = { showHelpDialog = false },
+            title = { Text("সাহায্য ও সাধারণ প্রশ্নোত্তর", fontWeight = FontWeight.Bold, color = Color(0xFF075747)) },
+            text = {
+                Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
+                    Text("প্রশ্ন ১: কীভাবে খেদমতের বিজ্ঞপ্তি খুঁজব?\nউত্তর: 'খেদমত' ট্যাবে গিয়ে আপনার পছন্দমতো ফিল্টার করে দেখতে পারেন।\n\n" +
+                            "প্রশ্ন ২: কীভাবে আবেদন করব?\nউত্তর: যেকোনো বিজ্ঞপ্তিতে প্রবেশ করে সহজে আবেদন জমা দিতে পারবেন।",
+                        fontSize = 13.sp,
+                        color = Color(0xFF075747)
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { showHelpDialog = false }) {
+                    Text("বন্ধ করুন", color = Color(0xFF075747), fontWeight = FontWeight.Bold)
+                }
+            }
+        )
+    }
+
+    if (showContactDialog) {
+        AlertDialog(
+            onDismissRequest = { showContactDialog = false },
+            title = { Text("যোগাযোগ ও সমস্যা জানান", fontWeight = FontWeight.Bold, color = Color(0xFF075747)) },
+            text = {
+                Column {
+                    Text("কোনো সমস্যা বা ভুয়া বিজ্ঞপ্তির সন্ধান পেলে আমাদের জানান:\n\nইমেইল: support@kawmikormo.org\nহেল্পলাইন: +৮৮০ ৯৬০০০০০০০",
+                        fontSize = 13.sp,
+                        color = Color(0xFF075747)
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { showContactDialog = false }) {
+                    Text("ঠিক আছে", color = Color(0xFF075747), fontWeight = FontWeight.Bold)
+                }
+            }
+        )
+    }
+
+    if (showFeedbackDialog) {
+        AlertDialog(
+            onDismissRequest = { showFeedbackDialog = false },
+            title = { Text("মতামত দিন", fontWeight = FontWeight.Bold, color = Color(0xFF075747)) },
+            text = {
+                Column {
+                    Text("আমাদের অ্যাপ সম্পর্কে আপনার মূল্যবান মতামত বা পরামর্শ দিন:", fontSize = 13.sp, color = Color(0xFF075747))
+                    Spacer(Modifier.height(10.dp))
+                    var feedbackText by remember { mutableStateOf("") }
+                    OutlinedTextField(
+                        value = feedbackText,
+                        onValueChange = { feedbackText = it },
+                        placeholder = { Text("এখানে লিখুন...") },
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(8.dp)
+                    )
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        showFeedbackDialog = false
+                        Toast.makeText(context, "মতামত পাঠানোর জন্য জাযাকাল্লাহ খায়ের!", Toast.LENGTH_SHORT).show()
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF075747))
+                ) {
+                    Text("জমা দিন", color = Color.White)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showFeedbackDialog = false }) {
+                    Text("বাতিল")
+                }
+            }
+        )
+    }
+
+    if (showLogoutConfirmDialog) {
+        AlertDialog(
+            onDismissRequest = { showLogoutConfirmDialog = false },
+            title = { Text("লগআউট নিশ্চিতকরণ", fontWeight = FontWeight.Bold, color = Color(0xFFB4233A)) },
+            text = { Text("আপনি কি নিশ্চিত যে লগআউট করতে চান?", fontSize = 15.sp, color = Color(0xFF075747)) },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        showLogoutConfirmDialog = false
+                        auth.signOut()
+                        navController.navigate("auth") {
+                            popUpTo(0) { inclusive = true }
+                        }
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFB4233A))
+                ) {
+                    Text("লগআউট করুন", color = Color.White, fontWeight = FontWeight.Bold)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showLogoutConfirmDialog = false }) {
+                    Text("বাতিল", color = Color(0xFF075747))
+                }
+            }
+        )
     }
 }
 
