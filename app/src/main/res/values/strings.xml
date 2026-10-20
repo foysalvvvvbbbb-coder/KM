@@ -1,3 +1,5 @@
 <resources>
     <string name="app_name">কওমি কর্মসংস্থান বাংলাদেশ</string>
+    <!-- Firebase Console -> Authentication -> Sign-in method -> Google -> Web SDK configuration -> Web client ID -->
+    <string name="custom_web_client_id" translatable="false">606917405325-2irml4tp1qpet69ih8t7gicccr534t9n.apps.googleusercontent.com</string>
 </resources>

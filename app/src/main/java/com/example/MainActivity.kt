@@ -1,54 +1,63 @@
 package com.example
 
 import android.os.Bundle
+import android.util.Patterns
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.Canvas
-import androidx.compose.foundation.verticalScroll
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.*
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.credentials.CredentialManager
+import androidx.credentials.CustomCredential
+import androidx.credentials.GetCredentialRequest
+import androidx.credentials.exceptions.GetCredentialCancellationException
+import androidx.credentials.exceptions.GetCredentialException
+import androidx.credentials.exceptions.NoCredentialException
 import androidx.navigation.NavController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
-import androidx.compose.animation.core.animateDpAsState
-import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.tween
-import androidx.compose.foundation.Canvas
-import androidx.compose.foundation.verticalScroll
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.draw.shadow
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Brush
-import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.ui.text.input.KeyboardType
-import androidx.compose.ui.text.input.PasswordVisualTransformation
-import androidx.compose.ui.text.input.VisualTransformation
-import com.google.firebase.auth.FirebaseAuth
-import android.util.Patterns
-import com.example.ui.theme.KaomiKormoTheme
 import com.example.ui.theme.DarkGreenBox
 import com.example.ui.theme.GoldBox
 import com.example.ui.theme.IslamicGreen
+import com.example.ui.theme.KaomiKormoTheme
 import com.example.ui.theme.White
+import com.google.android.libraries.identity.googleid.GetSignInWithGoogleOption
+import com.google.android.libraries.identity.googleid.GoogleIdTokenCredential
+import com.google.firebase.auth.FirebaseAuth
+import com.google.firebase.auth.GoogleAuthProvider
+import kotlinx.coroutines.launch
 
 // Theme Colors
 val DeepEmerald = Color(0xFF0B3028)
@@ -59,6 +68,11 @@ val MutedGold = Color(0xFFD9B66F)
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        try {
+            com.google.firebase.FirebaseApp.initializeApp(this)
+        } catch (e: Exception) {
+            android.util.Log.e("AuthDebug", "Firebase init error: ${e.message}")
+        }
         enableEdgeToEdge()
         setContent {
             KaomiKormoTheme(darkTheme = false) {
@@ -71,18 +85,18 @@ class MainActivity : ComponentActivity() {
 @Composable
 fun AppNavigation() {
     val navController = rememberNavController()
-    val items = listOf("হোম" to Icons.Default.Home, "খেদমত" to Icons.Default.Work, "আবেদন" to Icons.Default.List, "প্রোফাইল" to Icons.Default.Person)
+    val items = listOf("হোম" to Icons.Default.Home, "খেদমত" to Icons.Default.Work, "আবেদন" to Icons.AutoMirrored.Filled.List, "প্রোফাইল" to Icons.Default.Person)
     val routes = listOf("home", "khedmot", "abedon", "profile")
     val currentRoute = navController.currentBackStackEntryAsState().value?.destination?.route
 
     Scaffold(
         bottomBar = {
-            if (currentRoute == "home" || currentRoute == "khedmot" || currentRoute == "abedon" || currentRoute == "profile") {
+            if (currentRoute in routes) {
                 NavigationBar(containerColor = Color(0xFF1E1E1E), tonalElevation = 8.dp) {
                     items.forEachIndexed { index, (label, icon) ->
                         NavigationBarItem(
                             selected = currentRoute == routes[index],
-                            onClick = { navController.navigate(routes[index]) { popUpTo(0) } },
+                            onClick = { navController.navigate(routes[index]) { popUpTo("home") } },
                             icon = { Icon(icon, contentDescription = label) },
                             label = { Text(label) },
                             colors = NavigationBarItemDefaults.colors(
@@ -98,14 +112,14 @@ fun AppNavigation() {
     ) { innerPadding ->
         NavHost(
             navController, 
-            startDestination = "auth", 
+            startDestination = if (FirebaseAuth.getInstance().currentUser != null) "home" else "auth", 
             Modifier.padding(innerPadding)
         ) {
             composable("auth") { AuthScreen(navController) }
             composable("home") { HomeScreen(navController) }
             composable("khedmot") { SimpleScreen("খেদমত") }
             composable("abedon") { SimpleScreen("আবেদন") }
-            composable("profile") { SimpleScreen("প্রোফাইল") }
+            composable("profile") { ProfileScreen(navController) }
             composable("search_khedmot") { SimpleScreen("খেদমত খোঁজা") }
             composable("post_niyog") { SimpleScreen("নিয়োগ প্রকাশ") }
         }
@@ -150,23 +164,99 @@ fun StyledButton(text: String, onClick: () -> Unit, modifier: Modifier = Modifie
 }
 
 fun getAuthErrorMessage(exception: Exception?): String {
+    if (exception == null) return "অজ্ঞাত সমস্যা দেখা দিয়েছে।"
     return when (exception) {
-        is com.google.firebase.auth.FirebaseAuthInvalidUserException -> "অ্যাকাউন্টটি খুঁজে পাওয়া যায়নি।"
-        is com.google.firebase.auth.FirebaseAuthInvalidCredentialsException -> "ইমেইল বা পাসওয়ার্ড ভুল।"
-        is com.google.firebase.auth.FirebaseAuthUserCollisionException -> "এই ইমেইলটি ইতিমধ্যে ব্যবহৃত হয়েছে।"
-        is com.google.firebase.auth.FirebaseAuthWeakPasswordException -> "পাসওয়ার্ডটি খুব সহজ, আরও শক্তিশালী পাসওয়ার্ড ব্যবহার করুন।"
-        else -> "কিছু ভুল হয়েছে, পুনরায় চেষ্টা করুন।"
+        is com.google.firebase.auth.FirebaseAuthWeakPasswordException -> "পাসওয়ার্ডটি খুব দুর্বল। অন্তত ৬ অক্ষরের শক্তিশালী পাসওয়ার্ড দিন।"
+        is com.google.firebase.auth.FirebaseAuthInvalidUserException -> "অ্যাকাউন্টটি খুঁজে পাওয়া যায়নি বা মুছে ফেলা হয়েছে।"
+        is com.google.firebase.auth.FirebaseAuthInvalidCredentialsException -> "ইমেইল বা পাসওয়ার্ড সঠিক নয়।"
+        is com.google.firebase.auth.FirebaseAuthUserCollisionException -> "এই ইমেইলটি দিয়ে ইতিমধ্যে অ্যাকাউন্ট খোলা আছে।"
+        is com.google.firebase.FirebaseNetworkException -> "ইন্টারনেট সংযোগ নেই বা সার্ভারের সাথে যোগাযোগ করা যাচ্ছে না।"
+        is com.google.firebase.FirebaseTooManyRequestsException -> "অতিরিক্ত ভুল চেষ্টার কারণে সাময়িকভাবে ব্লক করা হয়েছে। কিছুক্ষণ পর চেষ্টা করুন।"
+        is com.google.firebase.auth.FirebaseAuthException -> "প্রমাণীকরণ ত্রুটি: ${exception.localizedMessage ?: exception.errorCode}"
+        else -> "সমস্যা: ${exception.localizedMessage ?: exception.message ?: "অজ্ঞাত ত্রুটি"}"
     }
+}
+
+fun validatePasswordResetEmail(email: String): String? {
+    val trimmed = email.trim()
+    return when {
+        trimmed.isBlank() -> "আপনার ইমেইল ঠিকানা লিখুন।"
+        !Patterns.EMAIL_ADDRESS.matcher(trimmed).matches() -> "সঠিক ইমেইল ফরম্যাট দিন (যেমন: name@example.com)।"
+        else -> null
+    }
+}
+
+fun getPasswordResetErrorMessage(exception: Exception?): String {
+    if (exception == null) return "পাসওয়ার্ড রিসেট লিংক পাঠাতে ব্যর্থ হয়েছে। অনুগ্রহ করে আবার চেষ্টা করুন।"
+    return when (exception) {
+        is com.google.firebase.auth.FirebaseAuthInvalidUserException -> "এই ইমেইল দিয়ে কোনো অ্যাকাউন্ট পাওয়া যায়নি।"
+        is com.google.firebase.auth.FirebaseAuthInvalidCredentialsException -> "ইমেইল ঠিকানাটি সঠিক নয়।"
+        is com.google.firebase.FirebaseNetworkException -> "ইন্টারনেট সংযোগ নেই বা সার্ভারের সাথে যোগাযোগ করা যাচ্ছে না।"
+        is com.google.firebase.FirebaseTooManyRequestsException -> "অতিরিক্ত অনুরোধের কারণে সাময়িকভাবে ব্লক করা হয়েছে। কিছুক্ষণ পর চেষ্টা করুন।"
+        is com.google.firebase.auth.FirebaseAuthException -> "প্রমাণীকরণ ত্রুটি: ${exception.localizedMessage ?: exception.errorCode}"
+        else -> "ইমেইল পাঠাতে ব্যর্থ: ${exception.localizedMessage ?: exception.message ?: "অজ্ঞাত ত্রুটি"}"
+    }
+}
+
+fun getGoogleSignInErrorMessage(exception: Exception?): String {
+    if (exception == null) return "গুগল সাইন-ইন সম্পন্ন করা যায়নি।"
+    if (exception is GetCredentialCancellationException) {
+        return "গুগল লগইন বাতিল করা হয়েছে।"
+    }
+    if (exception is NoCredentialException) {
+        return "ডিভাইসে কোনো গুগল অ্যাকাউন্ট পাওয়া যায়নি। অনুগ্রহ করে ডিভাইসে গুগল অ্যাকাউন্ট যোগ করুন।"
+    }
+    val msg = exception.localizedMessage ?: exception.message ?: ""
+    return when {
+        msg.contains("16:") || msg.contains("DEVELOPER_ERROR") ->
+            "গুগল সাইন-ইন কনফিগারেশন ত্রুটি। Firebase Console-এ SHA-1 ফিঙ্গারপ্রিন্ট ও Web Client ID সক্রিয় করুন।"
+        msg.contains("10:") || msg.contains("DEVELOPER_ERROR") ->
+            "গুগল কনফিগারেশন মিসম্যাচ। SHA-1 ও Package Name যাচাই করুন।"
+        msg.contains("7:") || msg.contains("NETWORK_ERROR") ->
+            "ইন্টারনেট সংযোগ নেই বা সার্ভারের সাথে যোগাযোগ করা যাচ্ছে না।"
+        msg.contains("Canceled", ignoreCase = true) || msg.contains("cancelled", ignoreCase = true) ->
+            "গুগল লগইন বাতিল করা হয়েছে।"
+        else ->
+            "গুগল লগইন সম্পন্ন করা যায়নি: ${msg.ifBlank { "অজ্ঞাত ত্রুটি" }}"
+    }
+}
+
+fun resolveGoogleWebClientId(context: android.content.Context): String {
+    // 1. Try google-services generated default_web_client_id
+    val defaultResId = context.resources.getIdentifier("default_web_client_id", "string", context.packageName)
+    if (defaultResId != 0) {
+        try {
+            val id = context.getString(defaultResId).trim()
+            if (id.isNotBlank() && !id.startsWith("YOUR_") && !id.contains("example")) {
+                return id
+            }
+        } catch (_: Exception) {}
+    }
+    // 2. Try custom_web_client_id from strings.xml
+    val customResId = context.resources.getIdentifier("custom_web_client_id", "string", context.packageName)
+    if (customResId != 0) {
+        try {
+            val id = context.getString(customResId).trim()
+            if (id.isNotBlank() && !id.startsWith("YOUR_") && !id.contains("example")) {
+                return id
+            }
+        } catch (_: Exception) {}
+    }
+    return ""
 }
 
 @Composable
 fun IslamicLoginScreen(navController: NavController, onRegister: () -> Unit) {
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val coroutineScope = rememberCoroutineScope()
     val auth = remember { FirebaseAuth.getInstance() }
     var email by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
     var passwordVisible by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
     var isLoading by remember { mutableStateOf(false) }
+    var isGoogleLoading by remember { mutableStateOf(false) }
+    var showGoogleHelpDialog by remember { mutableStateOf(false) }
     
     Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
         Card(
@@ -177,46 +267,330 @@ fun IslamicLoginScreen(navController: NavController, onRegister: () -> Unit) {
             shape = RoundedCornerShape(16.dp),
             colors = CardDefaults.cardColors(containerColor = Color.Transparent)
         ) {
-            Column(Modifier.padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                Text("কওমি কর্মসংস্থান বাংলাদেশ", fontSize = 22.sp, fontWeight = FontWeight.Bold, color = ElegantGreen, modifier = Modifier.padding(bottom = 24.dp))
+            Column(
+                Modifier
+                    .padding(24.dp)
+                    .verticalScroll(rememberScrollState()), 
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Text(
+                    "কওমি কর্মসংস্থান বাংলাদেশ", 
+                    fontSize = 22.sp, 
+                    fontWeight = FontWeight.Bold, 
+                    color = ElegantGreen, 
+                    modifier = Modifier.padding(bottom = 24.dp)
+                )
                 
-                OutlinedTextField(email, { email = it }, label = { Text("ইমেইল") }, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(8.dp))
+                OutlinedTextField(
+                    value = email, 
+                    onValueChange = { email = it }, 
+                    label = { Text("ইমেইল") }, 
+                    modifier = Modifier.fillMaxWidth().testTag("email_input"), 
+                    shape = RoundedCornerShape(8.dp),
+                    enabled = !isLoading && !isGoogleLoading
+                )
                 Spacer(Modifier.height(16.dp))
-                OutlinedTextField(password, { password = it }, label = { Text("পাসওয়ার্ড") }, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(8.dp), visualTransformation = if (passwordVisible) VisualTransformation.None else PasswordVisualTransformation(), trailingIcon = { IconButton(onClick = { passwordVisible = !passwordVisible }) { Icon(if (passwordVisible) Icons.Default.Visibility else Icons.Default.VisibilityOff, "Toggle") } })
+                OutlinedTextField(
+                    value = password, 
+                    onValueChange = { password = it }, 
+                    label = { Text("পাসওয়ার্ড") }, 
+                    modifier = Modifier.fillMaxWidth().testTag("password_input"), 
+                    shape = RoundedCornerShape(8.dp), 
+                    visualTransformation = if (passwordVisible) VisualTransformation.None else PasswordVisualTransformation(), 
+                    trailingIcon = { 
+                        IconButton(onClick = { passwordVisible = !passwordVisible }) { 
+                            Icon(if (passwordVisible) Icons.Default.Visibility else Icons.Default.VisibilityOff, "Toggle") 
+                        } 
+                    },
+                    enabled = !isLoading && !isGoogleLoading
+                )
                 
-                error?.let { Text(it, color = if (it.contains("পাঠানো হয়েছে")) Color(0xFF075B45) else Color.Red, fontSize = 12.sp, modifier = Modifier.padding(top = 8.dp)) }
+                error?.let { 
+                    Text(
+                        it, 
+                        color = if (it.contains("পাঠানো হয়েছে")) Color(0xFF075B45) else Color(0xFFB00020), 
+                        fontSize = 12.sp, 
+                        fontWeight = FontWeight.Medium,
+                        modifier = Modifier.padding(top = 8.dp).testTag("auth_error_text")
+                    ) 
+                }
+                
+                var showForgotDialog by remember { mutableStateOf(false) }
                 
                 TextButton(
+                    onClick = { showForgotDialog = true }, 
+                    modifier = Modifier.align(Alignment.End),
+                    enabled = !isLoading && !isGoogleLoading
+                ) { Text("পাসওয়ার্ড ভুলে গেছেন?", color = ElegantGreen) }
+
+                if (showForgotDialog) {
+                    ForgotPasswordDialog(
+                        auth = auth,
+                        initialEmail = email,
+                        onDismiss = { showForgotDialog = false }
+                    )
+                }
+                
+                Spacer(Modifier.height(16.dp))
+                Button(
                     onClick = {
-                        if (email.isBlank() || !Patterns.EMAIL_ADDRESS.matcher(email).matches()) {
-                            error = "দয়া করে সঠিক ইমেইল দিন।"
+                        val trimmedEmail = email.trim()
+                        if (trimmedEmail.isBlank()) {
+                            error = "আপনার ইমেইল লিখুন।"
+                        } else if (!Patterns.EMAIL_ADDRESS.matcher(trimmedEmail).matches()) {
+                            error = "সঠিক ইমেইল ফরম্যাট দিন (যেমন: name@example.com)।"
+                        } else if (password.isBlank()) {
+                            error = "আপনার পাসওয়ার্ড লিখুন।"
+                        } else if (password.length < 6) {
+                            error = "পাসওয়ার্ড অন্তত ৬ অক্ষরের হতে হবে।"
                         } else {
                             isLoading = true
-                            auth.sendPasswordResetEmail(email).addOnCompleteListener { task ->
+                            error = null
+                            try {
+                                auth.signInWithEmailAndPassword(trimmedEmail, password)
+                                    .addOnCompleteListener { task ->
+                                        isLoading = false
+                                        if (task.isSuccessful && auth.currentUser != null) {
+                                            val user = auth.currentUser
+                                            android.util.Log.d("AuthDebug", "Login Success for uid: ${user?.uid}")
+                                            val userDisplayName = user?.displayName
+                                            if (!userDisplayName.isNullOrBlank()) {
+                                                try {
+                                                    val prefs = context.getSharedPreferences("user_prefs", android.content.Context.MODE_PRIVATE)
+                                                    user.uid.let { uid ->
+                                                        prefs.edit().putString("name_$uid", userDisplayName).apply()
+                                                    }
+                                                } catch (_: Exception) {}
+                                            }
+                                            navController.navigate("home") {
+                                                popUpTo("auth") { inclusive = true }
+                                            }
+                                        } else {
+                                            val ex = task.exception
+                                            android.util.Log.e("AuthDebug", "Login Failed", ex)
+                                            error = getAuthErrorMessage(ex)
+                                        }
+                                    }
+                                    .addOnFailureListener { ex ->
+                                        isLoading = false
+                                        android.util.Log.e("AuthDebug", "Login Failure Listener", ex)
+                                        error = getAuthErrorMessage(ex)
+                                    }
+                            } catch (e: Exception) {
                                 isLoading = false
-                                if (task.isSuccessful) error = "পাসওয়ার্ড রিসেট ইমেইল পাঠানো হয়েছে।"
-                                else error = "ইমেইল পাঠাতে ব্যর্থ: ${task.exception?.localizedMessage ?: "অজ্ঞাত ত্রুটি"}"
+                                android.util.Log.e("AuthDebug", "Login Exception", e)
+                                error = getAuthErrorMessage(e)
                             }
                         }
                     }, 
-                    modifier = Modifier.align(Alignment.End),
-                    enabled = !isLoading
-                ) { Text(if (isLoading) "অপেক্ষা করুন..." else "পাসওয়ার্ড ভুলে গেছেন?", color = ElegantGreen) }
-                
-                Spacer(Modifier.height(16.dp))
-                Button(onClick = {
-                    if (email.isBlank() || password.isBlank()) error = "সব ফিল্ড পূরণ করুন"
-                    else {
-                        isLoading = true
-                        auth.signInWithEmailAndPassword(email, password).addOnCompleteListener { 
-                            isLoading = false
-                            if (it.isSuccessful) navController.navigate("home") { popUpTo(0) } else error = getAuthErrorMessage(it.exception) 
-                        }
+                    modifier = Modifier.fillMaxWidth().height(50.dp).testTag("login_button"), 
+                    colors = ButtonDefaults.buttonColors(containerColor = ElegantGreen), 
+                    enabled = !isLoading && !isGoogleLoading
+                ) { 
+                    if (isLoading) {
+                        CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp, color = WarmOffWhite)
+                        Spacer(Modifier.width(8.dp))
+                        Text("লগইন হচ্ছে...", color = WarmOffWhite, fontSize = 16.sp)
+                    } else {
+                        Text("লগইন করুন", color = WarmOffWhite, fontSize = 16.sp) 
                     }
-                }, modifier = Modifier.fillMaxWidth().height(50.dp), colors = ButtonDefaults.buttonColors(containerColor = ElegantGreen), enabled = !isLoading) { Text(if (isLoading) "লগইন হচ্ছে..." else "লগইন করুন", color = WarmOffWhite, fontSize = 16.sp) }
+                }
+
+                // “অথবা” Divider
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 12.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    HorizontalDivider(
+                        modifier = Modifier.weight(1f),
+                        color = MutedGold.copy(alpha = 0.5f),
+                        thickness = 1.dp
+                    )
+                    Text(
+                        text = "অথবা",
+                        modifier = Modifier.padding(horizontal = 12.dp),
+                        color = ElegantGreen,
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.Medium
+                    )
+                    HorizontalDivider(
+                        modifier = Modifier.weight(1f),
+                        color = MutedGold.copy(alpha = 0.5f),
+                        thickness = 1.dp
+                    )
+                }
+
+                // Google Sign-In Button
+                OutlinedButton(
+                    onClick = {
+                        if (isLoading || isGoogleLoading) return@OutlinedButton
+                        val webClientId = resolveGoogleWebClientId(context)
+                        if (webClientId.isBlank()) {
+                            error = "গুগল লগইন চালুর জন্য Firebase Console-এ Google Provider সক্রিয় করে Web Client ID সেট করুন।"
+                            showGoogleHelpDialog = true
+                            return@OutlinedButton
+                        }
+
+                        isGoogleLoading = true
+                        error = null
+
+                        coroutineScope.launch {
+                            try {
+                                val credentialManager = CredentialManager.create(context)
+                                val googleIdOption = GetSignInWithGoogleOption.Builder(webClientId)
+                                    .build()
+
+                                val request = GetCredentialRequest.Builder()
+                                    .addCredentialOption(googleIdOption)
+                                    .build()
+
+                                val result = credentialManager.getCredential(
+                                    context = context,
+                                    request = request
+                                )
+
+                                val credential = result.credential
+                                if (credential is CustomCredential &&
+                                    credential.type == GoogleIdTokenCredential.TYPE_GOOGLE_ID_TOKEN_CREDENTIAL
+                                ) {
+                                    val googleIdTokenCredential = GoogleIdTokenCredential.createFrom(credential.data)
+                                    val idToken = googleIdTokenCredential.idToken
+                                    val authCredential = GoogleAuthProvider.getCredential(idToken, null)
+
+                                    auth.signInWithCredential(authCredential)
+                                        .addOnCompleteListener { task ->
+                                            isGoogleLoading = false
+                                            if (task.isSuccessful && auth.currentUser != null) {
+                                                val user = auth.currentUser
+                                                android.util.Log.d("AuthDebug", "Google Sign-In Success: ${user?.uid}")
+                                                val userDisplayName = user?.displayName
+                                                if (!userDisplayName.isNullOrBlank()) {
+                                                    try {
+                                                        val prefs = context.getSharedPreferences("user_prefs", android.content.Context.MODE_PRIVATE)
+                                                        user.uid.let { uid ->
+                                                            prefs.edit().putString("name_$uid", userDisplayName).apply()
+                                                        }
+                                                    } catch (_: Exception) {}
+                                                }
+                                                navController.navigate("home") {
+                                                    popUpTo("auth") { inclusive = true }
+                                                }
+                                            } else {
+                                                val ex = task.exception
+                                                android.util.Log.e("AuthDebug", "Google Firebase auth failed", ex)
+                                                error = "গুগল লগইন সম্পন্ন করা যায়নি: ${getAuthErrorMessage(ex)}"
+                                            }
+                                        }
+                                        .addOnFailureListener { ex ->
+                                            isGoogleLoading = false
+                                            android.util.Log.e("AuthDebug", "Google Firebase auth failure listener", ex)
+                                            error = "গুগল লগইন সম্পন্ন করা যায়নি: ${getAuthErrorMessage(ex)}"
+                                        }
+                                } else {
+                                    isGoogleLoading = false
+                                    error = "গুগল প্রমাণপত্র পাওয়া যায়নি।"
+                                }
+                            } catch (e: GetCredentialCancellationException) {
+                                isGoogleLoading = false
+                                android.util.Log.d("AuthDebug", "Google Sign-In canceled by user")
+                                error = "গুগল লগইন বাতিল করা হয়েছে।"
+                            } catch (e: NoCredentialException) {
+                                isGoogleLoading = false
+                                android.util.Log.e("AuthDebug", "No Google account found on device", e)
+                                error = "ডিভাইসে কোনো গুগল অ্যাকাউন্ট পাওয়া যায়নি। অনুগ্রহ করে ডিভাইসে গুগল অ্যাকাউন্ট যোগ করুন।"
+                            } catch (e: GetCredentialException) {
+                                isGoogleLoading = false
+                                android.util.Log.e("AuthDebug", "Google Sign-In GetCredentialException", e)
+                                error = getGoogleSignInErrorMessage(e)
+                            } catch (e: Exception) {
+                                isGoogleLoading = false
+                                android.util.Log.e("AuthDebug", "Google Sign-In unexpected error", e)
+                                error = "গুগল লগইনে সমস্যা হয়েছে: ${e.localizedMessage ?: "অনুগ্রহ করে আবার চেষ্টা করুন।"}"
+                            }
+                        }
+                    },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(50.dp)
+                        .testTag("google_login_button"),
+                    shape = RoundedCornerShape(10.dp),
+                    colors = ButtonDefaults.outlinedButtonColors(
+                        containerColor = Color.White,
+                        contentColor = DeepEmerald
+                    ),
+                    border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFD3D3D3)),
+                    enabled = !isLoading && !isGoogleLoading
+                ) {
+                    if (isGoogleLoading) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(20.dp),
+                            strokeWidth = 2.dp,
+                            color = ElegantGreen
+                        )
+                        Spacer(Modifier.width(10.dp))
+                        Text(
+                            text = "গুগল সাইন-ইন হচ্ছে...",
+                            fontSize = 15.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = DeepEmerald
+                        )
+                    } else {
+                        Icon(
+                            painter = painterResource(id = R.drawable.ic_google_logo),
+                            contentDescription = "Google Logo",
+                            tint = Color.Unspecified,
+                            modifier = Modifier.size(22.dp)
+                        )
+                        Spacer(Modifier.width(10.dp))
+                        Text(
+                            text = "Google দিয়ে লগইন করুন",
+                            fontSize = 15.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = DeepEmerald
+                        )
+                    }
+                }
                 
-                TextButton(onClick = onRegister, modifier = Modifier.padding(top = 8.dp)) { Text("নতুন অ্যাকাউন্ট তৈরি করুন", color = ElegantGreen, fontWeight = FontWeight.Bold) }
+                TextButton(
+                    onClick = onRegister, 
+                    modifier = Modifier.padding(top = 8.dp),
+                    enabled = !isLoading && !isGoogleLoading
+                ) { 
+                    Text("নতুন অ্যাকাউন্ট তৈরি করুন", color = ElegantGreen, fontWeight = FontWeight.Bold) 
+                }
             }
+        }
+
+        if (showGoogleHelpDialog) {
+            AlertDialog(
+                onDismissRequest = { showGoogleHelpDialog = false },
+                title = {
+                    Text("Google সাইন-ইন কনফিগারেশন", fontWeight = FontWeight.Bold, color = ElegantGreen)
+                },
+                text = {
+                    Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
+                        Text(
+                            "Google Sign-In সক্রিয় করতে Firebase-এ নিচের ধাপগুলো সম্পন্ন করুন:",
+                            fontSize = 14.sp,
+                            color = DeepEmerald
+                        )
+                        Spacer(Modifier.height(8.dp))
+                        Text("১. Firebase Console > Authentication > Sign-in method-এ যান।", fontSize = 13.sp)
+                        Text("২. 'Google' প্রোভাইডার নির্বাচন করে Enable করুন এবং Support email দিয়ে Save করুন।", fontSize = 13.sp)
+                        Text("৩. Project Settings-এ গিয়ে আপনার Android App-এ SHA-1 যুক্ত করুন।", fontSize = 13.sp)
+                        Text("৪. নতুন google-services.json ডাউনলোড করে app ফোল্ডারে রাখুন (বা strings.xml-এর custom_web_client_id-এ Web Client ID পেস্ট করুন)।", fontSize = 13.sp)
+                    }
+                },
+                confirmButton = {
+                    TextButton(onClick = { showGoogleHelpDialog = false }) {
+                        Text("ঠিক আছে", color = ElegantGreen, fontWeight = FontWeight.Bold)
+                    }
+                },
+                containerColor = WarmOffWhite,
+                shape = RoundedCornerShape(16.dp)
+            )
         }
     }
 }
@@ -228,6 +602,8 @@ fun IslamicRegisterScreen(navController: NavController, onLogin: () -> Unit) {
     var email by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
     var confirmPassword by remember { mutableStateOf("") }
+    var passwordVisible by remember { mutableStateOf(false) }
+    var confirmPasswordVisible by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
     var isLoading by remember { mutableStateOf(false) }
     
@@ -237,29 +613,178 @@ fun IslamicRegisterScreen(navController: NavController, onLogin: () -> Unit) {
             shape = RoundedCornerShape(16.dp),
             colors = CardDefaults.cardColors(containerColor = WarmOffWhite)
         ) {
-            Column(Modifier.padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                Text("নতুন নিবন্ধন", fontSize = 28.sp, fontWeight = FontWeight.Bold, color = ElegantGreen)
-                Spacer(Modifier.height(24.dp))
-                OutlinedTextField(name, { name = it }, label = { Text("নাম") }, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(8.dp))
-                Spacer(Modifier.height(16.dp))
-                OutlinedTextField(email, { email = it }, label = { Text("ইমেইল") }, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(8.dp))
-                Spacer(Modifier.height(16.dp))
-                OutlinedTextField(password, { password = it }, label = { Text("পাসওয়ার্ড") }, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(8.dp), visualTransformation = PasswordVisualTransformation())
-                Spacer(Modifier.height(16.dp))
-                OutlinedTextField(confirmPassword, { confirmPassword = it }, label = { Text("পাসওয়ার্ড নিশ্চিত করুন") }, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(8.dp), visualTransformation = PasswordVisualTransformation())
-                error?.let { Text(it, color = Color.Red, fontSize = 12.sp, modifier = Modifier.padding(top = 8.dp)) }
-                Spacer(Modifier.height(24.dp))
-                Button(onClick = {
-                    if (name.isBlank() || email.isBlank() || password.isBlank() || password != confirmPassword) error = "সব তথ্য সঠিকভাবে দিন"
-                    else {
-                        isLoading = true
-                        auth.createUserWithEmailAndPassword(email, password).addOnCompleteListener { 
-                            isLoading = false
-                            if (it.isSuccessful) navController.navigate("home") { popUpTo(0) } else error = getAuthErrorMessage(it.exception) 
+            Column(
+                Modifier
+                    .padding(24.dp)
+                    .verticalScroll(rememberScrollState()), 
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Text("নতুন নিবন্ধন", fontSize = 26.sp, fontWeight = FontWeight.Bold, color = ElegantGreen)
+                Spacer(Modifier.height(20.dp))
+                
+                OutlinedTextField(
+                    value = name, 
+                    onValueChange = { name = it }, 
+                    label = { Text("পূর্ণ নাম") }, 
+                    modifier = Modifier.fillMaxWidth(), 
+                    shape = RoundedCornerShape(8.dp),
+                    singleLine = true
+                )
+                Spacer(Modifier.height(14.dp))
+                
+                OutlinedTextField(
+                    value = email, 
+                    onValueChange = { email = it }, 
+                    label = { Text("ইমেইল") }, 
+                    modifier = Modifier.fillMaxWidth(), 
+                    shape = RoundedCornerShape(8.dp),
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email),
+                    singleLine = true
+                )
+                Spacer(Modifier.height(14.dp))
+                
+                OutlinedTextField(
+                    value = password, 
+                    onValueChange = { password = it }, 
+                    label = { Text("পাসওয়ার্ড (কমপক্ষে ৬ অক্ষর)") }, 
+                    modifier = Modifier.fillMaxWidth(), 
+                    shape = RoundedCornerShape(8.dp), 
+                    visualTransformation = if (passwordVisible) VisualTransformation.None else PasswordVisualTransformation(),
+                    trailingIcon = { 
+                        IconButton(onClick = { passwordVisible = !passwordVisible }) { 
+                            Icon(if (passwordVisible) Icons.Default.Visibility else Icons.Default.VisibilityOff, "Toggle") 
+                        } 
+                    },
+                    singleLine = true
+                )
+                Spacer(Modifier.height(14.dp))
+                
+                OutlinedTextField(
+                    value = confirmPassword, 
+                    onValueChange = { confirmPassword = it }, 
+                    label = { Text("পাসওয়ার্ড নিশ্চিত করুন") }, 
+                    modifier = Modifier.fillMaxWidth(), 
+                    shape = RoundedCornerShape(8.dp), 
+                    visualTransformation = if (confirmPasswordVisible) VisualTransformation.None else PasswordVisualTransformation(),
+                    trailingIcon = { 
+                        IconButton(onClick = { confirmPasswordVisible = !confirmPasswordVisible }) { 
+                            Icon(if (confirmPasswordVisible) Icons.Default.Visibility else Icons.Default.VisibilityOff, "Toggle") 
+                        } 
+                    },
+                    singleLine = true
+                )
+                
+                error?.let { 
+                    Text(
+                        it, 
+                        color = Color(0xFFB00020), 
+                        fontSize = 13.sp, 
+                        fontWeight = FontWeight.Medium,
+                        modifier = Modifier.padding(top = 10.dp)
+                    ) 
+                }
+                
+                Spacer(Modifier.height(20.dp))
+                
+                Button(
+                    onClick = {
+                        val trimmedName = name.trim()
+                        val trimmedEmail = email.trim()
+                        
+                        if (trimmedName.isBlank()) {
+                            error = "আপনার নাম লিখুন।"
+                        } else if (trimmedEmail.isBlank()) {
+                            error = "আপনার ইমেইল লিখুন।"
+                        } else if (!Patterns.EMAIL_ADDRESS.matcher(trimmedEmail).matches()) {
+                            error = "সঠিক ইমেইল ফরম্যাট দিন (যেমন: name@example.com)।"
+                        } else if (password.length < 6) {
+                            error = "পাসওয়ার্ড অন্তত ৬ অক্ষরের হতে হবে।"
+                        } else if (password != confirmPassword) {
+                            error = "পাসওয়ার্ড ও নিশ্চিতকরণ পাসওয়ার্ড মেলেনি।"
+                        } else {
+                            isLoading = true
+                            error = null
+                            try {
+                                auth.createUserWithEmailAndPassword(trimmedEmail, password)
+                                    .addOnCompleteListener { task ->
+                                        if (task.isSuccessful && auth.currentUser != null) {
+                                            val user = auth.currentUser
+                                            android.util.Log.d("AuthDebug", "Registration Success for uid: ${user?.uid}")
+                                            
+                                            // Immediately cache display name locally as fallback
+                                            try {
+                                                val context = navController.context
+                                                val prefs = context.getSharedPreferences("user_prefs", android.content.Context.MODE_PRIVATE)
+                                                user?.uid?.let { uid ->
+                                                    prefs.edit().putString("name_$uid", trimmedName).apply()
+                                                }
+                                            } catch (e: Exception) {
+                                                android.util.Log.w("AuthDebug", "Local name caching error", e)
+                                            }
+
+                                            // Update profile in Firebase Authentication and wait for completion
+                                            val profileUpdates = com.google.firebase.auth.UserProfileChangeRequest.Builder()
+                                                .setDisplayName(trimmedName)
+                                                .build()
+
+                                            user?.updateProfile(profileUpdates)?.addOnCompleteListener { profileTask ->
+                                                if (profileTask.isSuccessful) {
+                                                    android.util.Log.d("AuthDebug", "Firebase updateProfile success: $trimmedName")
+                                                } else {
+                                                    android.util.Log.w("AuthDebug", "Firebase updateProfile failed: ${profileTask.exception?.message}")
+                                                }
+
+                                                // Reload currentUser to guarantee displayName is populated immediately
+                                                user.reload().addOnCompleteListener {
+                                                    isLoading = false
+                                                    navController.navigate("home") {
+                                                        popUpTo("auth") { inclusive = true }
+                                                    }
+                                                }
+                                            }?.addOnFailureListener { ex ->
+                                                android.util.Log.e("AuthDebug", "Firebase updateProfile failure listener", ex)
+                                                user.reload().addOnCompleteListener {
+                                                    isLoading = false
+                                                    navController.navigate("home") {
+                                                        popUpTo("auth") { inclusive = true }
+                                                    }
+                                                }
+                                            } ?: run {
+                                                isLoading = false
+                                                navController.navigate("home") {
+                                                    popUpTo("auth") { inclusive = true }
+                                                }
+                                            }
+                                        } else {
+                                            isLoading = false
+                                            val ex = task.exception
+                                            android.util.Log.e("AuthDebug", "Registration Failed", ex)
+                                            error = getAuthErrorMessage(ex)
+                                        }
+                                    }
+                                    .addOnFailureListener { ex ->
+                                        isLoading = false
+                                        android.util.Log.e("AuthDebug", "Registration Failure Listener", ex)
+                                        error = getAuthErrorMessage(ex)
+                                    }
+                            } catch (e: Exception) {
+                                isLoading = false
+                                android.util.Log.e("AuthDebug", "Registration Exception", e)
+                                error = getAuthErrorMessage(e)
+                            }
                         }
-                    }
-                }, modifier = Modifier.fillMaxWidth().height(50.dp), colors = ButtonDefaults.buttonColors(containerColor = ElegantGreen), enabled = !isLoading) { Text(if (isLoading) "নিবন্ধন হচ্ছে..." else "নিবন্ধন করুন", color = WarmOffWhite, fontSize = 16.sp) }
-                TextButton(onClick = onLogin) { Text("লগইন করুন", color = ElegantGreen, fontWeight = FontWeight.Bold) }
+                    }, 
+                    modifier = Modifier.fillMaxWidth().height(50.dp), 
+                    colors = ButtonDefaults.buttonColors(containerColor = ElegantGreen), 
+                    enabled = !isLoading
+                ) { 
+                    Text(if (isLoading) "নিবন্ধন হচ্ছে..." else "নিবন্ধন করুন", color = WarmOffWhite, fontSize = 16.sp) 
+                }
+                
+                Spacer(Modifier.height(8.dp))
+                TextButton(onClick = onLogin) { 
+                    Text("ইতিমধ্যে অ্যাকাউন্ট আছে? লগইন করুন", color = ElegantGreen, fontWeight = FontWeight.Bold) 
+                }
             }
         }
     }
@@ -280,18 +805,60 @@ fun InfoCard(text: String, containerColor: Color, textColor: Color, modifier: Mo
 
 @Composable
 fun HomeScreen(navController: NavController) {
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val auth = remember { FirebaseAuth.getInstance() }
+    val initialUser = auth.currentUser
+    val cachedName = remember(initialUser?.uid) {
+        val uid = initialUser?.uid
+        if (uid != null) {
+            val prefs = context.getSharedPreferences("user_prefs", android.content.Context.MODE_PRIVATE)
+            prefs.getString("name_$uid", null)
+        } else null
+    }
+    var greetingName by remember {
+        mutableStateOf(
+            initialUser?.displayName?.takeIf { it.isNotBlank() } ?: cachedName?.takeIf { it.isNotBlank() }
+        )
+    }
+
+    LaunchedEffect(Unit) {
+        initialUser?.reload()?.addOnCompleteListener {
+            val updatedUser = auth.currentUser
+            val freshName = updatedUser?.displayName?.takeIf { it.isNotBlank() }
+            if (freshName != null) {
+                greetingName = freshName
+            }
+        }
+    }
+
     Column(
         modifier = Modifier
             .fillMaxSize()
             .background(MaterialTheme.colorScheme.background)
             .padding(16.dp)
     ) {
-        Text(text = "কওমি কর্মসংস্থান বাংলাদেশ", fontSize = 24.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
-        Spacer(modifier = Modifier.height(8.dp))
-        Text(text = "আসসালামু আলাইকুম", fontSize = 18.sp, color = MaterialTheme.colorScheme.onBackground)
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(text = "কওমি কর্মসংস্থান বাংলাদেশ", fontSize = 22.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
+                Text(
+                    text = greetingName?.let { "স্বাগতম, $it" } ?: "আসসালামু আলাইকুম", 
+                    fontSize = 16.sp, 
+                    color = MaterialTheme.colorScheme.onBackground
+                )
+            }
+            IconButton(onClick = { navController.navigate("profile") }) {
+                Icon(Icons.Default.AccountCircle, contentDescription = "Profile", tint = ElegantGreen, modifier = Modifier.size(32.dp))
+            }
+        }
+        
+        Spacer(modifier = Modifier.height(6.dp))
         Text(text = "আপনার উপযুক্ত খেদমতের সুযোগ খুঁজে নিন।", fontSize = 14.sp, color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.7f))
         
-        Spacer(modifier = Modifier.height(24.dp))
+        Spacer(modifier = Modifier.height(20.dp))
         
         var query by remember { mutableStateOf("") }
         OutlinedTextField(
@@ -315,7 +882,311 @@ fun HomeScreen(navController: NavController) {
     }
 }
 
+@Composable
+fun ProfileScreen(navController: NavController) {
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val auth = remember { FirebaseAuth.getInstance() }
+    val initialUser = auth.currentUser
 
+    // 1. Check cached name as immediate safeguard
+    val cachedName = remember(initialUser?.uid) {
+        val uid = initialUser?.uid
+        if (uid != null) {
+            val prefs = context.getSharedPreferences("user_prefs", android.content.Context.MODE_PRIVATE)
+            prefs.getString("name_$uid", null)
+        } else null
+    }
+
+    var displayName by remember { 
+        mutableStateOf(
+            when {
+                !initialUser?.displayName.isNullOrBlank() -> initialUser?.displayName!!
+                !cachedName.isNullOrBlank() -> cachedName
+                else -> "নাম প্রদান করা হয়নি"
+            }
+        ) 
+    }
+    var email by remember { mutableStateOf(initialUser?.email ?: "লগইন করা নেই") }
+    var uid by remember { mutableStateOf(initialUser?.uid ?: "নাই") }
+    var isReloading by remember { mutableStateOf(false) }
+
+    // 2. Fetch fresh user data with reload() to ensure latest profile data is displayed
+    LaunchedEffect(Unit) {
+        val user = auth.currentUser
+        if (user != null) {
+            isReloading = true
+            user.reload().addOnCompleteListener { task ->
+                isReloading = false
+                val refreshedUser = auth.currentUser
+                if (refreshedUser != null) {
+                    val freshName = refreshedUser.displayName
+                    if (!freshName.isNullOrBlank()) {
+                        displayName = freshName
+                        try {
+                            val prefs = context.getSharedPreferences("user_prefs", android.content.Context.MODE_PRIVATE)
+                            prefs.edit().putString("name_${refreshedUser.uid}", freshName).apply()
+                        } catch (e: Exception) {
+                            // ignore
+                        }
+                    } else if (!cachedName.isNullOrBlank()) {
+                        displayName = cachedName
+                    }
+                    email = refreshedUser.email ?: "লগইন করা নেই"
+                    uid = refreshedUser.uid
+                }
+            }
+        }
+    }
+
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(MaterialTheme.colorScheme.background)
+            .padding(24.dp),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Text("ব্যবহারকারী প্রোফাইল", fontSize = 22.sp, fontWeight = FontWeight.Bold, color = ElegantGreen)
+        Spacer(Modifier.height(24.dp))
+        
+        Icon(
+            imageVector = Icons.Default.AccountCircle, 
+            contentDescription = "User Icon", 
+            tint = ElegantGreen, 
+            modifier = Modifier.size(80.dp)
+        )
+        Spacer(Modifier.height(16.dp))
+        
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            colors = CardDefaults.cardColors(containerColor = WarmOffWhite),
+            shape = RoundedCornerShape(12.dp)
+        ) {
+            Column(Modifier.padding(16.dp)) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text(
+                        "নাম: $displayName", 
+                        fontWeight = FontWeight.SemiBold, 
+                        fontSize = 16.sp, 
+                        color = DeepEmerald,
+                        modifier = Modifier.weight(1f)
+                    )
+                    if (isReloading) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(16.dp), 
+                            strokeWidth = 2.dp, 
+                            color = ElegantGreen
+                        )
+                    }
+                }
+                Spacer(Modifier.height(8.dp))
+                Text("ইমেইল: $email", fontSize = 14.sp, color = DeepEmerald)
+                Spacer(Modifier.height(8.dp))
+                Text("UID: $uid", fontSize = 12.sp, color = Color.Gray)
+                Spacer(Modifier.height(8.dp))
+                val isGoogleAccount = initialUser?.providerData?.any { it.providerId == "google.com" } == true
+                val providerText = if (isGoogleAccount) "Google Sign-In (Firebase)" else "Email / Password (Firebase)"
+                Text("প্রমাণীকরণ: $providerText", fontSize = 12.sp, color = Color(0xFF075B45))
+            }
+        }
+        
+        Spacer(Modifier.height(32.dp))
+        
+        Button(
+            onClick = {
+                auth.signOut()
+                navController.navigate("auth") {
+                    popUpTo(0) { inclusive = true }
+                }
+            },
+            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFB00020)),
+            modifier = Modifier.fillMaxWidth().height(48.dp),
+            shape = RoundedCornerShape(10.dp)
+        ) {
+            Icon(Icons.AutoMirrored.Filled.Logout, contentDescription = "Logout", tint = Color.White)
+            Spacer(Modifier.width(8.dp))
+            Text("লগআউট করুন", color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.Bold)
+        }
+    }
+}
+
+@Composable
+fun ForgotPasswordDialog(
+    auth: FirebaseAuth = remember { FirebaseAuth.getInstance() },
+    initialEmail: String = "",
+    onDismiss: () -> Unit
+) {
+    var emailInput by remember { mutableStateOf(initialEmail) }
+    var isLoading by remember { mutableStateOf(false) }
+    var errorMessage by remember { mutableStateOf<String?>(null) }
+    var successMessage by remember { mutableStateOf<String?>(null) }
+
+    AlertDialog(
+        onDismissRequest = {
+            if (!isLoading) onDismiss()
+        },
+        title = {
+            Text(
+                text = "পাসওয়ার্ড রিসেট",
+                fontWeight = FontWeight.Bold,
+                color = ElegantGreen,
+                fontSize = 18.sp
+            )
+        },
+        text = {
+            Column(modifier = Modifier.fillMaxWidth()) {
+                if (successMessage != null) {
+                    Card(
+                        colors = CardDefaults.cardColors(containerColor = Color(0xFFE8F5E9)),
+                        shape = RoundedCornerShape(8.dp),
+                        modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)
+                    ) {
+                        Column(modifier = Modifier.padding(14.dp)) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(
+                                    imageVector = Icons.Default.CheckCircle,
+                                    contentDescription = "সফল",
+                                    tint = Color(0xFF2E7D32),
+                                    modifier = Modifier.size(22.dp)
+                                )
+                                Spacer(Modifier.width(8.dp))
+                                Text(
+                                    text = "ইমেইল পাঠানো হয়েছে",
+                                    fontWeight = FontWeight.Bold,
+                                    color = Color(0xFF2E7D32),
+                                    fontSize = 15.sp
+                                )
+                            }
+                            Spacer(Modifier.height(8.dp))
+                            Text(
+                                text = successMessage!!,
+                                color = Color(0xFF1B5E20),
+                                fontSize = 13.sp,
+                                lineHeight = 19.sp
+                            )
+                        }
+                    }
+                } else {
+                    Text(
+                        text = "আপনার নিবন্ধিত ইমেইল ঠিকানাটি লিখুন। আমরা পাসওয়ার্ড রিসেট করার একটি লিংক পাঠাব।",
+                        fontSize = 13.sp,
+                        color = Color.DarkGray,
+                        modifier = Modifier.padding(bottom = 12.dp)
+                    )
+
+                    OutlinedTextField(
+                        value = emailInput,
+                        onValueChange = {
+                            emailInput = it
+                            errorMessage = null
+                        },
+                        label = { Text("আপনার ইমেইল") },
+                        placeholder = { Text("example@gmail.com") },
+                        modifier = Modifier.fillMaxWidth(),
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email),
+                        singleLine = true,
+                        enabled = !isLoading,
+                        shape = RoundedCornerShape(8.dp),
+                        isError = errorMessage != null
+                    )
+
+                    if (isLoading) {
+                        Spacer(Modifier.height(12.dp))
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.Center,
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(18.dp),
+                                strokeWidth = 2.dp,
+                                color = ElegantGreen
+                            )
+                            Spacer(Modifier.width(8.dp))
+                            Text(
+                                text = "লিংক পাঠানো হচ্ছে...",
+                                fontSize = 12.sp,
+                                color = ElegantGreen
+                            )
+                        }
+                    }
+
+                    errorMessage?.let {
+                        Spacer(Modifier.height(8.dp))
+                        Text(
+                            text = it,
+                            color = Color(0xFFB00020),
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Medium
+                        )
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            if (successMessage != null) {
+                Button(
+                    onClick = onDismiss,
+                    colors = ButtonDefaults.buttonColors(containerColor = ElegantGreen),
+                    shape = RoundedCornerShape(8.dp)
+                ) {
+                    Text("ঠিক আছে", color = Color.White)
+                }
+            } else {
+                Button(
+                    onClick = {
+                        val validationError = validatePasswordResetEmail(emailInput)
+                        if (validationError != null) {
+                            errorMessage = validationError
+                        } else {
+                            val trimmedEmail = emailInput.trim()
+                            isLoading = true
+                            errorMessage = null
+                            try {
+                                auth.sendPasswordResetEmail(trimmedEmail)
+                                    .addOnCompleteListener { task ->
+                                        isLoading = false
+                                        if (task.isSuccessful) {
+                                            successMessage = "পাসওয়ার্ড রিসেট করার লিংক আপনার ইমেইলে পাঠানো হয়েছে। ইনবক্স ও স্প্যাম ফোল্ডার চেক করুন।"
+                                        } else {
+                                            errorMessage = getPasswordResetErrorMessage(task.exception)
+                                        }
+                                    }
+                            } catch (e: Exception) {
+                                isLoading = false
+                                errorMessage = getPasswordResetErrorMessage(e)
+                            }
+                        }
+                    },
+                    enabled = !isLoading,
+                    colors = ButtonDefaults.buttonColors(containerColor = ElegantGreen),
+                    shape = RoundedCornerShape(8.dp)
+                ) {
+                    Text(if (isLoading) "অপেক্ষা করুন..." else "রিসেট লিংক পাঠান", color = Color.White)
+                }
+            }
+        },
+        dismissButton = {
+            if (successMessage != null) {
+                TextButton(
+                    onClick = onDismiss
+                ) {
+                    Text("বন্ধ করুন", color = Color.Gray)
+                }
+            } else {
+                TextButton(
+                    onClick = onDismiss,
+                    enabled = !isLoading
+                ) {
+                    Text("বাতিল", color = Color.Gray)
+                }
+            }
+        }
+    )
+}
 
 @Composable
 fun SimpleScreen(title: String) {
