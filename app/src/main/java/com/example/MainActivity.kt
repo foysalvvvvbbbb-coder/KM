@@ -2,24 +2,28 @@ package com.example
 
 import android.os.Bundle
 import android.util.Patterns
+import java.util.Calendar
+import java.time.LocalTime
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
-import androidx.compose.animation.core.animateDpAsState
-import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.tween
+import androidx.compose.animation.*
+import androidx.compose.animation.core.*
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.*
 import androidx.compose.material.icons.filled.*
+import androidx.compose.material.icons.outlined.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -55,8 +59,18 @@ import kotlinx.coroutines.launch
 // Theme Colors
 val DeepEmerald = Color(0xFF0B3028)
 val ElegantGreen = Color(0xFF14523F)
-val WarmOffWhite = Color(0xFFF7F5EE)
+val WarmOffWhite = Color(0xFFF7F5EE) // Keeping but not using for background
 val MutedGold = Color(0xFFD9B66F)
+
+object AppSession {
+    // Light, elegant background colors (NO WHITE)
+    val backgroundColor: Color = listOf(
+        Color(0xFFE8F5E9), // Light Sage Green
+        Color(0xFFE3F2FD), // Light Pastel Blue
+        Color(0xFFF3E5F5), // Light Pastel Lavender
+        Color(0xFFFFF3E0)  // Light Pastel Peach
+    ).random()
+}
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -682,86 +696,431 @@ fun InfoCard(text: String, containerColor: Color, textColor: Color, modifier: Mo
     }
 }
 
-@OptIn(ExperimentalLayoutApi::class)
 @Composable
-fun CompactDateHeader(modifier: Modifier = Modifier) {
-    val dateInfo = remember { DateUtils.getCurrentDateInfo() }
-
-    Surface(
+fun GlassCard(
+    modifier: Modifier = Modifier,
+    content: @Composable ColumnScope.() -> Unit
+) {
+    Card(
         modifier = modifier
             .fillMaxWidth()
-            .padding(horizontal = 4.dp),
-        color = WarmOffWhite.copy(alpha = 0.6f),
-        shape = RoundedCornerShape(8.dp)
+            .padding(horizontal = 4.dp)
+            .graphicsLayer {
+                shape = RoundedCornerShape(24.dp)
+                clip = true
+            }
+            .border(
+                BorderStroke(1.dp, Color.White.copy(alpha = 0.4f)),
+                RoundedCornerShape(24.dp)
+            ),
+        shape = RoundedCornerShape(24.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = Color.White.copy(alpha = 0.3f)
+        ),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
+        content = { Column(modifier = Modifier.padding(20.dp), content = content) }
+    )
+}
+
+@Composable
+fun DateCard(modifier: Modifier = Modifier) {
+    val dateInfo = remember { DateUtils.getCurrentDateInfo() }
+    
+    // Premium distinct Card for Date section with rich Islamic green styling for crystal-clear readability
+    Card(
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(horizontal = 4.dp, vertical = 2.dp)
+            .shadow(6.dp, RoundedCornerShape(18.dp)),
+        shape = RoundedCornerShape(18.dp),
+        colors = CardDefaults.cardColors(containerColor = Color(0xFF0F4C3A)),
+        border = BorderStroke(1.dp, MutedGold.copy(alpha = 0.7f))
+    ) {
+        Row(
+            modifier = Modifier.padding(14.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Surface(
+                shape = CircleShape,
+                color = MutedGold.copy(alpha = 0.2f),
+                modifier = Modifier.size(46.dp)
+            ) {
+                Icon(
+                    Icons.Outlined.DateRange, 
+                    contentDescription = null, 
+                    tint = MutedGold, 
+                    modifier = Modifier.padding(10.dp)
+                )
+            }
+            Spacer(modifier = Modifier.width(14.dp))
+            Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                // 1. Arabic / Hijri Date (First)
+                Text(
+                    text = dateInfo.hijriDate, 
+                    style = MaterialTheme.typography.titleSmall,
+                    color = MutedGold,
+                    fontWeight = FontWeight.Bold
+                )
+                // 2. Bengali Date (Second)
+                Text(
+                    text = dateInfo.bengaliDate, 
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = Color.White,
+                    fontWeight = FontWeight.SemiBold
+                )
+                // 3. English Date & Weekday (Third)
+                Text(
+                    text = "${dateInfo.englishDate} • ${dateInfo.weekday}", 
+                    style = MaterialTheme.typography.bodySmall,
+                    color = Color(0xFFB2DFDB)
+                )
+            }
+        }
+    }
+}
+
+@Composable
+fun PrayerTimesSection(modifier: Modifier = Modifier) {
+    var prayerTimes by remember { mutableStateOf<List<PrayerTime>>(emptyList()) }
+    var isLoading by remember { mutableStateOf(true) }
+    var errorMessage by remember { mutableStateOf<String?>(null) }
+    val scope = rememberCoroutineScope()
+
+    LaunchedEffect(Unit) {
+        scope.launch {
+            try {
+                prayerTimes = PrayerTimeManager.getPrayerTimes("Dhaka")
+                isLoading = false
+            } catch (e: Exception) {
+                errorMessage = "সময়সূচী লোড করা যায়নি"
+                isLoading = false
+            }
+        }
+    }
+    
+    // 3D Depth Card for Prayer Times with rich dark green gradient/container and strong shadow
+    Card(
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(horizontal = 4.dp)
+            .shadow(10.dp, RoundedCornerShape(20.dp)),
+        shape = RoundedCornerShape(20.dp),
+        colors = CardDefaults.cardColors(containerColor = Color(0xFF082B22)),
+        border = BorderStroke(1.5.dp, MutedGold.copy(alpha = 0.6f))
+    ) {
+        val cal = remember { Calendar.getInstance() }
+        val currentMinutesTotal = cal.get(Calendar.HOUR_OF_DAY) * 60 + cal.get(Calendar.MINUTE)
+        
+        fun parseMinutes(timeStr: String): Int {
+            return try {
+                val parts = timeStr.trim().take(5).split(":")
+                val h = parts[0].toInt()
+                val m = parts[1].toInt()
+                h * 60 + m
+            } catch (_: Exception) {
+                0
+            }
+        }
+
+        val activePrayerIndex = prayerTimes.indexOfLast { 
+            parseMinutes(it.start) <= currentMinutesTotal 
+        }
+        val nextPrayer = if (activePrayerIndex != -1 && activePrayerIndex < prayerTimes.size - 1) prayerTimes[activePrayerIndex + 1] else prayerTimes.firstOrNull()
+
+        Column(modifier = Modifier.padding(14.dp)) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically, 
+                horizontalArrangement = Arrangement.SpaceBetween, 
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Outlined.AccessTime, contentDescription = null, tint = MutedGold, modifier = Modifier.size(18.dp))
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text("নামাজের সময়সূচী", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold, color = Color.White)
+                }
+                nextPrayer?.let {
+                    Surface(shape = RoundedCornerShape(6.dp), color = MutedGold) {
+                        Text("পরবর্তী: ${it.name}", style = MaterialTheme.typography.labelSmall, modifier = Modifier.padding(6.dp, 2.dp), color = Color(0xFF082B22), fontWeight = FontWeight.Bold)
+                    }
+                }
+            }
+            Spacer(modifier = Modifier.height(10.dp))
+            
+            if (isLoading) {
+                CircularProgressIndicator(modifier = Modifier.align(Alignment.CenterHorizontally).size(24.dp), color = MutedGold)
+            } else if (errorMessage != null) {
+                Text(errorMessage!!, color = Color.Red, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
+            } else {
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    prayerTimes.forEachIndexed { index, prayer ->
+                        val isActive = index == activePrayerIndex
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .background(
+                                    if (isActive) MutedGold.copy(alpha = 0.25f) else Color.White.copy(alpha = 0.05f),
+                                    shape = RoundedCornerShape(8.dp)
+                                )
+                                .border(
+                                    BorderStroke(0.5.dp, if (isActive) MutedGold else Color.Transparent),
+                                    shape = RoundedCornerShape(8.dp)
+                                )
+                                .padding(horizontal = 10.dp, vertical = 6.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                prayer.name, 
+                                style = MaterialTheme.typography.bodyMedium, 
+                                fontWeight = FontWeight.Bold, 
+                                color = if (isActive) Color(0xFFFFD700) else Color.White
+                            )
+                            Row(
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                 // Start time chip
+                                Surface(
+                                    shape = RoundedCornerShape(4.dp),
+                                    color = Color.Black.copy(alpha = 0.3f)
+                                ) {
+                                    Text(
+                                        "শুরু: ${DateUtils.formatTimeTo12Hour(prayer.start)}", 
+                                        style = MaterialTheme.typography.bodySmall, 
+                                        color = Color(0xFFE0F2F1),
+                                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                    )
+                                }
+                                // End time chip with high-contrast background so yellow pops out perfectly
+                                Surface(
+                                    shape = RoundedCornerShape(4.dp),
+                                    color = Color.Black.copy(alpha = 0.5f)
+                                ) {
+                                    Text(
+                                        "শেষ: ${DateUtils.formatTimeTo12Hour(prayer.end)}", 
+                                        style = MaterialTheme.typography.bodySmall, 
+                                        color = Color(0xFFFFD700), // Brilliant Gold/Yellow that pops out
+                                        fontWeight = FontWeight.Bold,
+                                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun AajkerShoronCard(modifier: Modifier = Modifier) {
+    Card(
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(horizontal = 4.dp, vertical = 2.dp)
+            .shadow(6.dp, RoundedCornerShape(16.dp)),
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(containerColor = Color(0xFFF1F8E9)), // Soft botanical light green tint
+        border = BorderStroke(1.2.dp, MutedGold.copy(alpha = 0.8f))
     ) {
         Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 10.dp, vertical = 6.dp),
+            modifier = Modifier.padding(12.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            FlowRow(
-                modifier = Modifier.fillMaxWidth(),
+            // Floral decorated header
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.Center,
-                verticalArrangement = Arrangement.Center
+                modifier = Modifier.fillMaxWidth()
             ) {
-                // বাংলা তারিখ
-                Text(
-                    text = dateInfo.bengaliDate,
-                    fontSize = 11.5.sp,
-                    fontWeight = FontWeight.Normal,
-                    color = DeepEmerald.copy(alpha = 0.85f)
+                Icon(
+                    Icons.Default.LocalFlorist,
+                    contentDescription = null,
+                    tint = Color(0xFF2E7D32), // Floral green
+                    modifier = Modifier.size(16.dp)
                 )
-
+                Spacer(modifier = Modifier.width(6.dp))
                 Text(
-                    text = " • ",
-                    fontSize = 11.5.sp,
-                    color = Color.Gray.copy(alpha = 0.6f)
+                    "আজকের স্মরণ", 
+                    style = MaterialTheme.typography.titleSmall, 
+                    fontWeight = FontWeight.Bold, 
+                    color = DeepEmerald,
+                    textAlign = TextAlign.Center
                 )
-
-                // ইংরেজি তারিখ
-                Text(
-                    text = dateInfo.englishDate,
-                    fontSize = 11.5.sp,
-                    fontWeight = FontWeight.Normal,
-                    color = DeepEmerald.copy(alpha = 0.85f)
+                Spacer(modifier = Modifier.width(6.dp))
+                Icon(
+                    Icons.Default.LocalFlorist,
+                    contentDescription = null,
+                    tint = Color(0xFF2E7D32),
+                    modifier = Modifier.size(16.dp)
                 )
+            }
+            Spacer(modifier = Modifier.height(4.dp))
+            
+            // Main inspiring text
+            Text(
+                "আপনি কি আজ প্রিয় নবী হযরত মুহাম্মদ সাল্লাল্লাহু আলাইহি ওয়াসাল্লাম-এর ওপর দরুদ পাঠ করেছেন?",
+                style = MaterialTheme.typography.bodyMedium,
+                color = Color(0xFF1B382B),
+                fontWeight = FontWeight.Medium,
+                textAlign = TextAlign.Center,
+                lineHeight = 20.sp
+            )
+            
+            Spacer(modifier = Modifier.height(6.dp))
+            
+            // Darood box with floral/gold styling
+            Surface(
+                shape = RoundedCornerShape(10.dp),
+                color = Color.White,
+                border = BorderStroke(0.8.dp, MutedGold.copy(alpha = 0.6f)),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(
+                    modifier = Modifier.padding(10.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    Text(
+                        "“আল্লাহুম্মা সাল্লি আলা মুহাম্মাদিও ওয়া আলা আলি মুহাম্মাদ, সাল্লাল্লাহু আলাইহি ওয়াসাল্লাম”",
+                        style = MaterialTheme.typography.bodySmall,
+                        fontWeight = FontWeight.Bold,
+                        fontStyle = androidx.compose.ui.text.font.FontStyle.Italic,
+                        color = ElegantGreen,
+                        textAlign = TextAlign.Center,
+                        lineHeight = 18.sp
+                    )
+                }
+            }
+        }
+    }
+}
 
+@Composable
+fun GreetingCard(greetingName: String?) {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 4.dp, vertical = 2.dp)
+            .shadow(4.dp, RoundedCornerShape(16.dp)),
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(containerColor = Color(0xFF14523F)), // ElegantGreen
+        border = BorderStroke(1.dp, MutedGold.copy(alpha = 0.5f))
+    ) {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp)
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.fillMaxWidth()
+            ) {
                 Text(
-                    text = " • ",
-                    fontSize = 11.5.sp,
-                    color = Color.Gray.copy(alpha = 0.6f)
+                    text = "আসসালামু আলাইকুম, ",
+                    style = MaterialTheme.typography.titleMedium,
+                    color = Color(0xFFD9B66F) // MutedGold
                 )
-
-                // হিজরি তারিখ
                 Text(
-                    text = dateInfo.hijriDate,
-                    fontSize = 11.5.sp,
-                    fontWeight = FontWeight.Normal,
-                    color = DeepEmerald.copy(alpha = 0.85f)
+                    text = greetingName ?: "সম্মানিত ব্যবহারকারী",
+                    style = MaterialTheme.typography.titleMedium,
+                    color = Color.White,
+                    fontWeight = FontWeight.Bold,
+                    maxLines = 1
                 )
+            }
+            Text(
+                text = "কওমি কর্মসংস্থান প্ল্যাটফর্মে আপনাকে স্বাগতম।",
+                style = MaterialTheme.typography.bodySmall,
+                color = Color(0xFFB2DFDB)
+            )
+        }
+    }
+}
 
-                Text(
-                    text = " • ",
-                    fontSize = 11.5.sp,
-                    color = Color.Gray.copy(alpha = 0.6f)
+@Composable
+fun AnimatedHeaderBanner(onOpenDrawer: () -> Unit) {
+    val infiniteTransition = rememberInfiniteTransition(label = "header_live_glow")
+    
+    val primaryColor by infiniteTransition.animateColor(
+        initialValue = Color(0xFFD9B66F), // Gold
+        targetValue = Color(0xFF4CAF50), // Green
+        animationSpec = infiniteRepeatable(
+            animation = tween(1500, easing = LinearEasing),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "primary_color"
+    )
+
+    val secondaryColor by infiniteTransition.animateColor(
+        initialValue = Color(0xFFFFEB3B), // Bright Yellow
+        targetValue = Color(0xFF00E676), // Vibrant Mint Green
+        animationSpec = infiniteRepeatable(
+            animation = tween(1000, easing = LinearEasing),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "secondary_color"
+    )
+
+    val borderWidth by infiniteTransition.animateFloat(
+        initialValue = 1.5f,
+        targetValue = 3.5f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(800, easing = LinearEasing),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "border_width"
+    )
+
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 4.dp)
+            .shadow(8.dp, RoundedCornerShape(18.dp)),
+        shape = RoundedCornerShape(18.dp),
+        colors = CardDefaults.cardColors(containerColor = Color(0xFF082B22)),
+        border = BorderStroke(borderWidth.dp, secondaryColor)
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 10.dp, vertical = 12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            IconButton(onClick = onOpenDrawer) {
+                Icon(Icons.Default.Menu, contentDescription = "মেনু", tint = Color.White)
+            }
+            
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.Center
+            ) {
+                Icon(
+                    Icons.Default.LocalFlorist,
+                    contentDescription = null,
+                    tint = secondaryColor,
+                    modifier = Modifier.size(18.dp)
                 )
-
-                // সপ্তাহের বার
+                Spacer(modifier = Modifier.width(6.dp))
                 Text(
-                    text = dateInfo.weekday,
-                    fontSize = 11.5.sp,
-                    fontWeight = FontWeight.Normal,
-                    color = DeepEmerald.copy(alpha = 0.85f)
+                    text = "🌸 কওমি কর্মসংস্থান 🌸",
+                    fontSize = 17.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = primaryColor,
+                    textAlign = TextAlign.Center
+                )
+                Spacer(modifier = Modifier.width(6.dp))
+                Icon(
+                    Icons.Default.LocalFlorist,
+                    contentDescription = null,
+                    tint = secondaryColor,
+                    modifier = Modifier.size(18.dp)
                 )
             }
 
-            Text(
-                text = "*হিজরি তারিখ স্থানীয় চাঁদ দেখার ওপর পরিবর্তনশীল",
-                fontSize = 9.5.sp,
-                color = Color.Gray.copy(alpha = 0.7f),
-                modifier = Modifier.padding(top = 2.dp)
-            )
+            IconButton(onClick = { /* TODO: Notifications */ }) {
+                Icon(Icons.Default.Notifications, contentDescription = "নোটিফিকেশন", tint = Color.White)
+            }
         }
     }
 }
@@ -800,112 +1159,18 @@ fun HomeScreen(
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .background(MaterialTheme.colorScheme.background)
+            .background(AppSession.backgroundColor)
             .padding(horizontal = 16.dp, vertical = 10.dp)
             .verticalScroll(rememberScrollState())
     ) {
-        // 1. Top Header with Hamburger menu on left and App Title
-        // (Separate profile icon on top-right is removed)
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(vertical = 4.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            IconButton(
-                onClick = onOpenDrawer,
-                modifier = Modifier.testTag("drawer_menu_button")
-            ) {
-                Icon(
-                    imageVector = Icons.Default.Menu,
-                    contentDescription = "মেনু খুলুন",
-                    tint = ElegantGreen,
-                    modifier = Modifier.size(26.dp)
-                )
-            }
+        AnimatedHeaderBanner(onOpenDrawer)
 
-            Text(
-                text = "কওমি কর্মসংস্থান বাংলাদেশ",
-                fontSize = 19.sp,
-                fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.primary,
-                textAlign = TextAlign.Center,
-                modifier = Modifier
-                    .weight(1f)
-                    .padding(end = 40.dp) // Balances left hamburger icon for optical centering
-            )
-        }
-
-        Spacer(modifier = Modifier.height(6.dp))
-
-        // 2. Compact Date Header
-        CompactDateHeader()
-
-        Spacer(modifier = Modifier.height(18.dp))
-
-        // 3. Centered Home Page Welcome Section
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 16.dp),
-            horizontalAlignment = Alignment.CenterHorizontally
-        ) {
-            Text(
-                text = "কওমি কর্মসংস্থান",
-                fontSize = 24.sp,
-                fontWeight = FontWeight.Bold,
-                color = ElegantGreen,
-                textAlign = TextAlign.Center
-            )
-
-            Spacer(modifier = Modifier.height(4.dp))
-
-            val welcomeText = if (!greetingName.isNullOrBlank()) {
-                "স্বাগতম, $greetingName"
-            } else {
-                "স্বাগতম"
-            }
-
-            Text(
-                text = welcomeText,
-                fontSize = 16.sp,
-                fontWeight = FontWeight.SemiBold,
-                color = DeepEmerald,
-                textAlign = TextAlign.Center
-            )
-
-            Spacer(modifier = Modifier.height(4.dp))
-
-            Text(
-                text = "আপনার উপযুক্ত খেদমতের সুযোগ খুঁজে নিন।",
-                fontSize = 13.5.sp,
-                color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.7f),
-                textAlign = TextAlign.Center
-            )
-        }
-
-        Spacer(modifier = Modifier.height(20.dp))
-
-        var query by remember { mutableStateOf("") }
-        OutlinedTextField(
-            value = query,
-            onValueChange = { query = it },
-            placeholder = { Text("খেদমত বা প্রতিষ্ঠানের নাম লিখুন") },
-            modifier = Modifier.fillMaxWidth().testTag("search_field"),
-            shape = RoundedCornerShape(12.dp),
-            colors = OutlinedTextFieldDefaults.colors(
-                focusedBorderColor = MaterialTheme.colorScheme.primary,
-                unfocusedBorderColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.5f)
-            ),
-            trailingIcon = {
-                IconButton(onClick = { /* Handle Search */ }) {
-                    Icon(Icons.Default.Search, contentDescription = "Search", tint = MaterialTheme.colorScheme.primary)
-                }
-            }
-        )
-
-        Spacer(modifier = Modifier.height(20.dp))
-
+        Spacer(modifier = Modifier.height(10.dp))
+        DateCard()
+        Spacer(modifier = Modifier.height(16.dp))
+        GreetingCard(greetingName)
+        Spacer(modifier = Modifier.height(16.dp))
+        
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
             InfoCard(
                 text = "খেদমত খুঁজুন",
@@ -920,6 +1185,12 @@ fun HomeScreen(
                 modifier = Modifier.weight(1f).clickable { navController.navigate("post_niyog") }
             )
         }
+
+        Spacer(modifier = Modifier.height(16.dp))
+        PrayerTimesSection()
+        Spacer(modifier = Modifier.height(16.dp))
+        AajkerShoronCard()
+        Spacer(modifier = Modifier.height(16.dp))
     }
 }
 

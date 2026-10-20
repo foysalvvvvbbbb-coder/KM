@@ -224,4 +224,31 @@ object DateUtils {
             weekday = getWeekday(cal)
         )
     }
+
+    /**
+     * Converts 24-hour time string (e.g. "18:30", "04:50") to 12-hour Bengali format with period (সকাল/দুপুর/বিকাল/সন্ধ্যা/রাত).
+     */
+    fun formatTimeTo12Hour(timeStr: String): String {
+        try {
+            val cleanTime = timeStr.trim().take(5) // take HH:mm
+            val parts = cleanTime.split(":")
+            if (parts.size >= 2) {
+                var hour = parts[0].toIntOrNull() ?: return toBengaliDigits(timeStr)
+                val minute = parts[1]
+                val period = when {
+                    hour == 0 -> { hour = 12; "রাত" }
+                    hour < 4 -> "রাত"
+                    hour < 12 -> "সকাল"
+                    hour == 12 -> "দুপুর"
+                    hour < 16 -> { hour -= 12; "দুপুর" }
+                    hour < 18 -> { hour -= 12; "বিকাল" }
+                    hour < 20 -> { hour -= 12; "সন্ধ্যা" }
+                    else -> { hour -= 12; "রাত" }
+                }
+                val hourStr = String.format("%02d", hour)
+                return "${toBengaliDigits("$hourStr:$minute")} $period"
+            }
+        } catch (_: Exception) {}
+        return toBengaliDigits(timeStr)
+    }
 }
