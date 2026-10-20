@@ -166,28 +166,56 @@ fun IslamicLoginScreen(navController: NavController, onRegister: () -> Unit) {
     var password by remember { mutableStateOf("") }
     var passwordVisible by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
+    var isLoading by remember { mutableStateOf(false) }
     
     Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
         Card(
-            modifier = Modifier.fillMaxWidth(0.9f).border(1.dp, MutedGold, RoundedCornerShape(16.dp)),
+            modifier = Modifier.fillMaxWidth(0.9f)
+                .clip(RoundedCornerShape(16.dp))
+                .background(WarmOffWhite.copy(alpha = 0.8f))
+                .border(1.dp, MutedGold.copy(alpha = 0.3f), RoundedCornerShape(16.dp)),
             shape = RoundedCornerShape(16.dp),
-            colors = CardDefaults.cardColors(containerColor = WarmOffWhite)
+            colors = CardDefaults.cardColors(containerColor = Color.Transparent)
         ) {
             Column(Modifier.padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                Text("কওমি কর্মসংস্থান", fontSize = 20.sp, fontWeight = FontWeight.Bold, color = ElegantGreen)
-                Text("লগইন", fontSize = 28.sp, fontWeight = FontWeight.Bold, color = ElegantGreen)
-                Spacer(Modifier.height(24.dp))
+                Text("কওমি কর্মসংস্থান বাংলাদেশ", fontSize = 22.sp, fontWeight = FontWeight.Bold, color = ElegantGreen, modifier = Modifier.padding(bottom = 24.dp))
+                
                 OutlinedTextField(email, { email = it }, label = { Text("ইমেইল") }, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(8.dp))
                 Spacer(Modifier.height(16.dp))
                 OutlinedTextField(password, { password = it }, label = { Text("পাসওয়ার্ড") }, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(8.dp), visualTransformation = if (passwordVisible) VisualTransformation.None else PasswordVisualTransformation(), trailingIcon = { IconButton(onClick = { passwordVisible = !passwordVisible }) { Icon(if (passwordVisible) Icons.Default.Visibility else Icons.Default.VisibilityOff, "Toggle") } })
-                error?.let { Text(it, color = Color.Red, fontSize = 12.sp, modifier = Modifier.padding(top = 8.dp)) }
-                TextButton(onClick = { /* Handle Forgot */ }, modifier = Modifier.align(Alignment.End)) { Text("পাসওয়ার্ড ভুলে গেছেন?", color = ElegantGreen) }
+                
+                error?.let { Text(it, color = if (it.contains("পাঠানো হয়েছে")) Color(0xFF075B45) else Color.Red, fontSize = 12.sp, modifier = Modifier.padding(top = 8.dp)) }
+                
+                TextButton(
+                    onClick = {
+                        if (email.isBlank() || !Patterns.EMAIL_ADDRESS.matcher(email).matches()) {
+                            error = "দয়া করে সঠিক ইমেইল দিন।"
+                        } else {
+                            isLoading = true
+                            auth.sendPasswordResetEmail(email).addOnCompleteListener { task ->
+                                isLoading = false
+                                if (task.isSuccessful) error = "পাসওয়ার্ড রিসেট ইমেইল পাঠানো হয়েছে।"
+                                else error = "ইমেইল পাঠাতে ব্যর্থ: ${task.exception?.localizedMessage ?: "অজ্ঞাত ত্রুটি"}"
+                            }
+                        }
+                    }, 
+                    modifier = Modifier.align(Alignment.End),
+                    enabled = !isLoading
+                ) { Text(if (isLoading) "অপেক্ষা করুন..." else "পাসওয়ার্ড ভুলে গেছেন?", color = ElegantGreen) }
+                
                 Spacer(Modifier.height(16.dp))
                 Button(onClick = {
                     if (email.isBlank() || password.isBlank()) error = "সব ফিল্ড পূরণ করুন"
-                    else auth.signInWithEmailAndPassword(email, password).addOnCompleteListener { if (it.isSuccessful) navController.navigate("home") { popUpTo(0) } else error = getAuthErrorMessage(it.exception) }
-                }, modifier = Modifier.fillMaxWidth().height(50.dp), colors = ButtonDefaults.buttonColors(containerColor = ElegantGreen)) { Text("লগইন করুন", color = WarmOffWhite, fontSize = 16.sp) }
-                TextButton(onClick = onRegister) { Text("নতুন অ্যাকাউন্ট তৈরি করুন", color = MutedGold) }
+                    else {
+                        isLoading = true
+                        auth.signInWithEmailAndPassword(email, password).addOnCompleteListener { 
+                            isLoading = false
+                            if (it.isSuccessful) navController.navigate("home") { popUpTo(0) } else error = getAuthErrorMessage(it.exception) 
+                        }
+                    }
+                }, modifier = Modifier.fillMaxWidth().height(50.dp), colors = ButtonDefaults.buttonColors(containerColor = ElegantGreen), enabled = !isLoading) { Text(if (isLoading) "লগইন হচ্ছে..." else "লগইন করুন", color = WarmOffWhite, fontSize = 16.sp) }
+                
+                TextButton(onClick = onRegister, modifier = Modifier.padding(top = 8.dp)) { Text("নতুন অ্যাকাউন্ট তৈরি করুন", color = ElegantGreen, fontWeight = FontWeight.Bold) }
             }
         }
     }
@@ -201,6 +229,7 @@ fun IslamicRegisterScreen(navController: NavController, onLogin: () -> Unit) {
     var password by remember { mutableStateOf("") }
     var confirmPassword by remember { mutableStateOf("") }
     var error by remember { mutableStateOf<String?>(null) }
+    var isLoading by remember { mutableStateOf(false) }
     
     Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
         Card(
@@ -222,9 +251,15 @@ fun IslamicRegisterScreen(navController: NavController, onLogin: () -> Unit) {
                 Spacer(Modifier.height(24.dp))
                 Button(onClick = {
                     if (name.isBlank() || email.isBlank() || password.isBlank() || password != confirmPassword) error = "সব তথ্য সঠিকভাবে দিন"
-                    else auth.createUserWithEmailAndPassword(email, password).addOnCompleteListener { if (it.isSuccessful) navController.navigate("home") { popUpTo(0) } else error = getAuthErrorMessage(it.exception) }
-                }, modifier = Modifier.fillMaxWidth().height(50.dp), colors = ButtonDefaults.buttonColors(containerColor = ElegantGreen)) { Text("নিবন্ধন করুন", color = WarmOffWhite, fontSize = 16.sp) }
-                TextButton(onClick = onLogin) { Text("লগইন করুন", color = MutedGold) }
+                    else {
+                        isLoading = true
+                        auth.createUserWithEmailAndPassword(email, password).addOnCompleteListener { 
+                            isLoading = false
+                            if (it.isSuccessful) navController.navigate("home") { popUpTo(0) } else error = getAuthErrorMessage(it.exception) 
+                        }
+                    }
+                }, modifier = Modifier.fillMaxWidth().height(50.dp), colors = ButtonDefaults.buttonColors(containerColor = ElegantGreen), enabled = !isLoading) { Text(if (isLoading) "নিবন্ধন হচ্ছে..." else "নিবন্ধন করুন", color = WarmOffWhite, fontSize = 16.sp) }
+                TextButton(onClick = onLogin) { Text("লগইন করুন", color = ElegantGreen, fontWeight = FontWeight.Bold) }
             }
         }
     }
