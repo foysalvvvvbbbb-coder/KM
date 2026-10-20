@@ -16,7 +16,6 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.*
@@ -30,24 +29,15 @@ import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
-import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import android.content.ContextWrapper
 import android.widget.Toast
-import androidx.credentials.CredentialManager
-import androidx.credentials.CustomCredential
-import androidx.credentials.GetCredentialRequest
-import androidx.credentials.exceptions.GetCredentialCancellationException
-import androidx.credentials.exceptions.GetCredentialException
-import androidx.credentials.exceptions.NoCredentialException
 import androidx.navigation.NavController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
@@ -58,10 +48,7 @@ import com.example.ui.theme.GoldBox
 import com.example.ui.theme.IslamicGreen
 import com.example.ui.theme.KaomiKormoTheme
 import com.example.ui.theme.White
-import com.google.android.libraries.identity.googleid.GetSignInWithGoogleOption
-import com.google.android.libraries.identity.googleid.GoogleIdTokenCredential
 import com.google.firebase.auth.FirebaseAuth
-import com.google.firebase.auth.GoogleAuthProvider
 import kotlinx.coroutines.launch
 
 // Theme Colors
@@ -178,8 +165,6 @@ fun IslamicLoginScreen(navController: NavController, onRegister: () -> Unit) {
     var passwordVisible by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
     var isLoading by remember { mutableStateOf(false) }
-    var isGoogleLoading by remember { mutableStateOf(false) }
-    var showGoogleHelpDialog by remember { mutableStateOf(false) }
     
     Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
         Card(
@@ -210,7 +195,7 @@ fun IslamicLoginScreen(navController: NavController, onRegister: () -> Unit) {
                     label = { Text("ইমেইল") }, 
                     modifier = Modifier.fillMaxWidth().testTag("email_input"), 
                     shape = RoundedCornerShape(8.dp),
-                    enabled = !isLoading && !isGoogleLoading
+                    enabled = !isLoading
                 )
                 Spacer(Modifier.height(16.dp))
                 OutlinedTextField(
@@ -225,7 +210,7 @@ fun IslamicLoginScreen(navController: NavController, onRegister: () -> Unit) {
                             Icon(if (passwordVisible) Icons.Default.Visibility else Icons.Default.VisibilityOff, "Toggle") 
                         } 
                     },
-                    enabled = !isLoading && !isGoogleLoading
+                    enabled = !isLoading
                 )
                 
                 error?.let { 
@@ -243,7 +228,7 @@ fun IslamicLoginScreen(navController: NavController, onRegister: () -> Unit) {
                 TextButton(
                     onClick = { showForgotDialog = true }, 
                     modifier = Modifier.align(Alignment.End),
-                    enabled = !isLoading && !isGoogleLoading
+                    enabled = !isLoading
                 ) { Text("পাসওয়ার্ড ভুলে গেছেন?", color = ElegantGreen) }
 
                 if (showForgotDialog) {
@@ -308,7 +293,7 @@ fun IslamicLoginScreen(navController: NavController, onRegister: () -> Unit) {
                     }, 
                     modifier = Modifier.fillMaxWidth().height(50.dp).testTag("login_button"), 
                     colors = ButtonDefaults.buttonColors(containerColor = ElegantGreen), 
-                    enabled = !isLoading && !isGoogleLoading
+                    enabled = !isLoading
                 ) { 
                     if (isLoading) {
                         CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp, color = WarmOffWhite)
@@ -319,226 +304,8 @@ fun IslamicLoginScreen(navController: NavController, onRegister: () -> Unit) {
                     }
                 }
 
-                // “অথবা” Divider
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(vertical = 12.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    HorizontalDivider(
-                        modifier = Modifier.weight(1f),
-                        color = MutedGold.copy(alpha = 0.5f),
-                        thickness = 1.dp
-                    )
-                    Text(
-                        text = "অথবা",
-                        modifier = Modifier.padding(horizontal = 12.dp),
-                        color = ElegantGreen,
-                        fontSize = 13.sp,
-                        fontWeight = FontWeight.Medium
-                    )
-                    HorizontalDivider(
-                        modifier = Modifier.weight(1f),
-                        color = MutedGold.copy(alpha = 0.5f),
-                        thickness = 1.dp
-                    )
-                }
-
-                // Google Sign-In Button
-                OutlinedButton(
-                    onClick = {
-                        if (isLoading || isGoogleLoading) return@OutlinedButton
-                        val webClientId = resolveGoogleWebClientId(context)
-                        if (webClientId.isBlank()) {
-                            val msg = "গুগল লগইন চালুর জন্য Firebase Console-এ Google Provider সক্রিয় করে Web Client ID সেট করুন।"
-                            error = msg
-                            Toast.makeText(context, msg, Toast.LENGTH_LONG).show()
-                            showGoogleHelpDialog = true
-                            return@OutlinedButton
-                        }
-
-                        isGoogleLoading = true
-                        error = null
-
-                        coroutineScope.launch {
-                            try {
-                                val targetContext = context.findActivity() ?: context
-                                val credentialManager = CredentialManager.create(targetContext)
-                                val googleIdOption = GetSignInWithGoogleOption.Builder(webClientId)
-                                    .build()
-
-                                val request = GetCredentialRequest.Builder()
-                                    .addCredentialOption(googleIdOption)
-                                    .build()
-
-                                android.util.Log.d("AuthDebug", "Requesting Google credentials via CredentialManager...")
-                                val result = credentialManager.getCredential(
-                                    context = targetContext,
-                                    request = request
-                                )
-
-                                val credential = result.credential
-                                android.util.Log.d("AuthDebug", "Credential received: ${credential::class.java.simpleName}, type: ${credential.type}")
-
-                                val idToken = extractGoogleIdToken(credential)
-
-                                if (idToken.isNullOrBlank()) {
-                                    isGoogleLoading = false
-                                    val tokenError = "গুগল আইডি টোকেন পাওয়া যায়নি। (টাইপ: ${credential.type})"
-                                    android.util.Log.e("AuthDebug", "Failed to retrieve Google ID token. Class: ${credential::class.java.name}, type: ${credential.type}")
-                                    error = tokenError
-                                    Toast.makeText(context, tokenError, Toast.LENGTH_LONG).show()
-                                    showGoogleHelpDialog = true
-                                } else {
-                                    android.util.Log.d("AuthDebug", "Google ID token obtained. Signing in with Firebase GoogleAuthProvider...")
-                                    val authCredential = GoogleAuthProvider.getCredential(idToken, null)
-
-                                    auth.signInWithCredential(authCredential)
-                                        .addOnCompleteListener { task ->
-                                            isGoogleLoading = false
-                                            if (task.isSuccessful && auth.currentUser != null) {
-                                                val user = auth.currentUser
-                                                android.util.Log.d("AuthDebug", "Firebase Google Sign-In SUCCESS: uid=${user?.uid}, email=${user?.email}")
-                                                val userDisplayName = user?.displayName
-                                                if (!userDisplayName.isNullOrBlank()) {
-                                                    try {
-                                                        val prefs = context.getSharedPreferences("user_prefs", android.content.Context.MODE_PRIVATE)
-                                                        user.uid.let { uid ->
-                                                            prefs.edit().putString("name_$uid", userDisplayName).apply()
-                                                        }
-                                                    } catch (e: Exception) {
-                                                        android.util.Log.w("AuthDebug", "Local user name caching failed", e)
-                                                    }
-                                                }
-                                                user?.reload()?.addOnCompleteListener {
-                                                    android.util.Log.d("AuthDebug", "Firebase user reload complete")
-                                                }
-                                                navController.navigate("home") {
-                                                    popUpTo("auth") { inclusive = true }
-                                                }
-                                            } else {
-                                                val ex = task.exception
-                                                val errorCode = (ex as? com.google.firebase.auth.FirebaseAuthException)?.errorCode ?: "UNKNOWN"
-                                                android.util.Log.e("AuthDebug", "Firebase Google auth failed. Code: $errorCode, message: ${ex?.message}", ex)
-                                                val errorMsg = "গুগল লগইন সম্পন্ন করা যায়নি: ${getAuthErrorMessage(ex)}"
-                                                error = errorMsg
-                                                Toast.makeText(context, errorMsg, Toast.LENGTH_LONG).show()
-                                                showGoogleHelpDialog = true
-                                            }
-                                        }
-                                        .addOnFailureListener { ex ->
-                                            if (isGoogleLoading) {
-                                                isGoogleLoading = false
-                                                val errorCode = (ex as? com.google.firebase.auth.FirebaseAuthException)?.errorCode ?: "UNKNOWN"
-                                                android.util.Log.e("AuthDebug", "Firebase Google auth onFailure. Code: $errorCode, message: ${ex.message}", ex)
-                                                val errorMsg = "গুগল লগইন সম্পন্ন করা যায়নি: ${getAuthErrorMessage(ex)}"
-                                                error = errorMsg
-                                                Toast.makeText(context, errorMsg, Toast.LENGTH_LONG).show()
-                                                showGoogleHelpDialog = true
-                                            }
-                                        }
-                                }
-                            } catch (e: GetCredentialCancellationException) {
-                                isGoogleLoading = false
-                                val msg = e.message ?: ""
-                                android.util.Log.d("AuthDebug", "Google Sign-In cancellation: $msg")
-                                if (msg.contains("Activity was cancelled", ignoreCase = true) || msg.contains("16:") || msg.contains("10:")) {
-                                    val err = "গুগল সাইন-ইন বন্ধ হয়েছে (Activity Cancelled)। Firebase Console-এ SHA-1 ফিঙ্গারপ্রিন্ট ও Support Email সেভ করা আছে কি না যাচাই করুন।"
-                                    error = err
-                                    Toast.makeText(context, err, Toast.LENGTH_LONG).show()
-                                    showGoogleHelpDialog = true
-                                }
-                            } catch (e: NoCredentialException) {
-                                isGoogleLoading = false
-                                android.util.Log.e("AuthDebug", "No Google account on device", e)
-                                val msg = "ডিভাইসে কোনো গুগল অ্যাকাউন্ট পাওয়া যায়নি। অনুগ্রহ করে ডিভাইসে গুগল অ্যাকাউন্ট যোগ করুন।"
-                                error = msg
-                                Toast.makeText(context, msg, Toast.LENGTH_LONG).show()
-                            } catch (e: GetCredentialException) {
-                                isGoogleLoading = false
-                                val errMsg = getGoogleSignInErrorMessage(e)
-                                if (errMsg.isNotBlank()) {
-                                    android.util.Log.e("AuthDebug", "Google Sign-In GetCredentialException: type=${e.type}, message=${e.message}", e)
-                                    error = errMsg
-                                    Toast.makeText(context, errMsg, Toast.LENGTH_LONG).show()
-                                    showGoogleHelpDialog = true
-                                } else {
-                                    android.util.Log.d("AuthDebug", "Google Sign-In dismissed/cancelled by user (GetCredentialException)")
-                                }
-                            } catch (e: Exception) {
-                                isGoogleLoading = false
-                                val rawMsg = e.localizedMessage ?: e.message ?: ""
-                                if (rawMsg.equals("User canceled", ignoreCase = true)) {
-                                    android.util.Log.d("AuthDebug", "Google Sign-In cancelled by user: $rawMsg")
-                                } else {
-                                    android.util.Log.e("AuthDebug", "Google Sign-In unexpected error: ${e::class.java.simpleName}, message: $rawMsg", e)
-                                    val errMsg = "গুগল লগইনে সমস্যা হয়েছে: ${rawMsg.ifBlank { "অনুগ্রহ করে আবার চেষ্টা করুন।" }}"
-                                    error = errMsg
-                                    Toast.makeText(context, errMsg, Toast.LENGTH_LONG).show()
-                                    showGoogleHelpDialog = true
-                                }
-                            }
-                        }
-                    },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(50.dp)
-                        .testTag("google_login_button"),
-                    shape = RoundedCornerShape(10.dp),
-                    colors = ButtonDefaults.outlinedButtonColors(
-                        containerColor = Color.White,
-                        contentColor = DeepEmerald
-                    ),
-                    border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFD3D3D3)),
-                    enabled = !isLoading && !isGoogleLoading
-                ) {
-                    if (isGoogleLoading) {
-                        CircularProgressIndicator(
-                            modifier = Modifier.size(20.dp),
-                            strokeWidth = 2.dp,
-                            color = ElegantGreen
-                        )
-                        Spacer(Modifier.width(10.dp))
-                        Text(
-                            text = "গুগল সাইন-ইন হচ্ছে...",
-                            fontSize = 15.sp,
-                            fontWeight = FontWeight.SemiBold,
-                            color = DeepEmerald
-                        )
-                    } else {
-                        Icon(
-                            painter = painterResource(id = R.drawable.ic_google_logo),
-                            contentDescription = "Google Logo",
-                            tint = Color.Unspecified,
-                            modifier = Modifier.size(22.dp)
-                        )
-                        Spacer(Modifier.width(10.dp))
-                        Text(
-                            text = "Google দিয়ে লগইন করুন",
-                            fontSize = 15.sp,
-                            fontWeight = FontWeight.SemiBold,
-                            color = DeepEmerald
-                        )
-                    }
-                }
-
-                // Always visible help button
-                TextButton(
-                    onClick = { showGoogleHelpDialog = true },
-                    modifier = Modifier.padding(top = 2.dp),
-                    enabled = !isLoading && !isGoogleLoading
-                ) {
-                    Text(
-                        "Google লগইন সমস্যা? SHA কী ও সমাধান দেখুন",
-                        color = ElegantGreen,
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.Medium
-                    )
-                }
-
                 if (error != null) {
-                    Spacer(Modifier.height(8.dp))
+                    Spacer(Modifier.height(12.dp))
                     Text(
                         text = error ?: "",
                         color = Color(0xFFB00020),
@@ -547,146 +314,16 @@ fun IslamicLoginScreen(navController: NavController, onRegister: () -> Unit) {
                         textAlign = androidx.compose.ui.text.style.TextAlign.Center,
                         modifier = Modifier.padding(horizontal = 8.dp)
                     )
-                    TextButton(onClick = { showGoogleHelpDialog = true }) {
-                        Text("Firebase কনফিগারেশন সহায়তা দেখুন", color = ElegantGreen, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
-                    }
                 }
                 
                 TextButton(
                     onClick = onRegister, 
                     modifier = Modifier.padding(top = 8.dp),
-                    enabled = !isLoading && !isGoogleLoading
+                    enabled = !isLoading
                 ) { 
                     Text("নতুন অ্যাকাউন্ট তৈরি করুন", color = ElegantGreen, fontWeight = FontWeight.Bold) 
                 }
             }
-        }
-
-        if (showGoogleHelpDialog) {
-            val clipboardManager = LocalClipboardManager.current
-            val sha1Key = "29:81:AD:43:C4:7A:87:F0:1B:96:44:B9:C8:AD:56:26:65:BF:67:71"
-            val sha256Key = "7C:C7:F3:99:14:E2:A2:2C:79:92:8F:3F:55:4A:9F:8E:80:11:A7:AE:A4:DD:3B:DD:A7:23:1A:32:7E:3E:2D:C9"
-            val packageName = "bd.kaomikormo.app"
-            val webClientIdStr = "606917405325-2irml4tp1qpet69ih8t7gicccr534t9n.apps.googleusercontent.com"
-
-            AlertDialog(
-                onDismissRequest = { showGoogleHelpDialog = false },
-                title = {
-                    Text("Google সাইন-ইন সমাধান গাইড", fontWeight = FontWeight.Bold, color = ElegantGreen)
-                },
-                text = {
-                    Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
-                        Text(
-                            "অ্যাকাউন্ট বাছাই করার পর লগইন না হওয়ার ৩টি মূল কারণ ও সমাধান:",
-                            fontSize = 13.sp,
-                            fontWeight = FontWeight.SemiBold,
-                            color = DeepEmerald
-                        )
-                        Spacer(Modifier.height(8.dp))
-
-                        Card(
-                            colors = CardDefaults.cardColors(containerColor = Color(0xFFE8F5E9)),
-                            modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)
-                        ) {
-                            Column(Modifier.padding(10.dp)) {
-                                Text(
-                                    "১. SHA-1 ফিঙ্গারপ্রিন্ট (বাধ্যতামূলক):",
-                                    fontWeight = FontWeight.Bold,
-                                    fontSize = 12.sp,
-                                    color = DeepEmerald
-                                )
-                                Text(
-                                    "শুধু SHA-256 যথেষ্ট নয়। Google Sign-In ক্লায়েন্টের জন্য SHA-1 আবশ্যক!",
-                                    fontSize = 11.sp,
-                                    color = Color(0xFF2E7D32)
-                                )
-                                Spacer(Modifier.height(4.dp))
-                                SelectionContainer {
-                                    Text(sha1Key, fontSize = 10.sp, fontWeight = FontWeight.Medium)
-                                }
-                                Spacer(Modifier.height(4.dp))
-                                Button(
-                                    onClick = {
-                                        clipboardManager.setText(AnnotatedString(sha1Key))
-                                        Toast.makeText(context, "SHA-1 কপি করা হয়েছে", Toast.LENGTH_SHORT).show()
-                                    },
-                                    modifier = Modifier.height(32.dp),
-                                    colors = ButtonDefaults.buttonColors(containerColor = ElegantGreen),
-                                    contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp)
-                                ) {
-                                    Text("SHA-1 কপি করুন", fontSize = 11.sp)
-                                }
-                            }
-                        }
-
-                        Spacer(Modifier.height(6.dp))
-
-                        Card(
-                            colors = CardDefaults.cardColors(containerColor = Color(0xFFFFF8E1)),
-                            modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)
-                        ) {
-                            Column(Modifier.padding(10.dp)) {
-                                Text(
-                                    "২. SHA-256 ফিঙ্গারপ্রিন্ট:",
-                                    fontWeight = FontWeight.Bold,
-                                    fontSize = 12.sp,
-                                    color = Color(0xFF8D6E63)
-                                )
-                                Spacer(Modifier.height(4.dp))
-                                SelectionContainer {
-                                    Text(sha256Key, fontSize = 10.sp, fontWeight = FontWeight.Medium)
-                                }
-                                Spacer(Modifier.height(4.dp))
-                                Button(
-                                    onClick = {
-                                        clipboardManager.setText(AnnotatedString(sha256Key))
-                                        Toast.makeText(context, "SHA-256 কপি করা হয়েছে", Toast.LENGTH_SHORT).show()
-                                    },
-                                    modifier = Modifier.height(32.dp),
-                                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF6D4C41)),
-                                    contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp)
-                                ) {
-                                    Text("SHA-256 কপি করুন", fontSize = 11.sp)
-                                }
-                            }
-                        }
-
-                        Spacer(Modifier.height(6.dp))
-                        Text(
-                            "৩. Firebase Authentication Support Email:",
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 12.sp,
-                            color = DeepEmerald
-                        )
-                        Text(
-                            "Firebase Console > Authentication > Sign-in method > Google-এ গিয়ে 'Project support email' ড্রপডাউন থেকে আপনার ইমেইল নির্বাচন করে Save করুন। এটি খালি থাকলে অ্যাকাউন্ট পিক করার পরই বন্ধ হয়ে যায়।",
-                            fontSize = 11.sp
-                        )
-
-                        Spacer(Modifier.height(6.dp))
-                        Text(
-                            "৪. OAuth Consent Screen (Google Cloud Console):",
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 12.sp,
-                            color = DeepEmerald
-                        )
-                        Text(
-                            "Google Cloud Console-এ গিয়ে OAuth Consent Screen 'In production' করুন অথবা 'Test Users' তালিকায় আপনার জিমেইল যোগ করুন।",
-                            fontSize = 11.sp
-                        )
-
-                        Spacer(Modifier.height(6.dp))
-                        Text("প্যাকেজ নাম: $packageName", fontSize = 11.sp, fontWeight = FontWeight.Medium)
-                    }
-                },
-                confirmButton = {
-                    TextButton(onClick = { showGoogleHelpDialog = false }) {
-                        Text("বুঝেছি", color = ElegantGreen, fontWeight = FontWeight.Bold)
-                    }
-                },
-                containerColor = WarmOffWhite,
-                shape = RoundedCornerShape(16.dp)
-            )
         }
     }
 }
@@ -1085,9 +722,7 @@ fun ProfileScreen(navController: NavController) {
                 Spacer(Modifier.height(8.dp))
                 Text("UID: $uid", fontSize = 12.sp, color = Color.Gray)
                 Spacer(Modifier.height(8.dp))
-                val isGoogleAccount = initialUser?.providerData?.any { it.providerId == "google.com" } == true
-                val providerText = if (isGoogleAccount) "Google Sign-In (Firebase)" else "Email / Password (Firebase)"
-                Text("প্রমাণীকরণ: $providerText", fontSize = 12.sp, color = Color(0xFF075B45))
+                Text("প্রমাণীকরণ: Email / Password (Firebase)", fontSize = 12.sp, color = Color(0xFF075B45))
             }
         }
         

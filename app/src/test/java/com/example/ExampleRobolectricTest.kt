@@ -117,25 +117,5 @@ class ExampleRobolectricTest {
         assertEquals("পাসওয়ার্ড রিসেট লিংক পাঠাতে ব্যর্থ হয়েছে। অনুগ্রহ করে আবার চেষ্টা করুন।", getPasswordResetErrorMessage(null))
     }
 
-    @Test
-    fun testGoogleSignInErrorMessageMapping() {
-        val cancellationEx = androidx.credentials.exceptions.GetCredentialCancellationException("User canceled")
-        val noCredEx = androidx.credentials.exceptions.NoCredentialException("No accounts found")
-        val devErrorEx = androidx.credentials.exceptions.GetCredentialCustomException("TYPE_ERROR", "10: DEVELOPER_ERROR")
-        val networkErrorEx = androidx.credentials.exceptions.GetCredentialCustomException("TYPE_ERROR", "7: NETWORK_ERROR")
-
-        assertEquals("", getGoogleSignInErrorMessage(cancellationEx))
-        assertEquals("ডিভাইসে কোনো গুগল অ্যাকাউন্ট পাওয়া যায়নি। অনুগ্রহ করে ডিভাইসে গুগল অ্যাকাউন্ট যোগ করুন।", getGoogleSignInErrorMessage(noCredEx))
-        assertEquals("গুগল কনফিগারেশন মিসম্যাচ (DEVELOPER_ERROR 10)। Firebase Console-এ SHA-1 ও SHA-256 ফিঙ্গারপ্রিন্ট যোগ করুন এবং Google Sign-In সক্রিয় করুন।", getGoogleSignInErrorMessage(devErrorEx))
-        assertEquals("ইন্টারনেট সংযোগ নেই বা সার্ভারের সাথে যোগাযোগ করা যাচ্ছে না।", getGoogleSignInErrorMessage(networkErrorEx))
-        assertEquals("গুগল সাইন-ইন সম্পন্ন করা যায়নি।", getGoogleSignInErrorMessage(null))
-    }
-
-    @Test
-    fun testResolveGoogleWebClientIdSafe() {
-        val context = ApplicationProvider.getApplicationContext<Context>()
-        val webClientId = resolveGoogleWebClientId(context)
-        assertEquals("606917405325-2irml4tp1qpet69ih8t7gicccr534t9n.apps.googleusercontent.com", webClientId)
-    }
 }
 
