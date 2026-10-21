@@ -8,6 +8,7 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
@@ -150,6 +151,12 @@ fun HomeTopBar(
     onOpenDrawer: () -> Unit,
     onNotificationClick: () -> Unit
 ) {
+    val sentNotifs by AdminRepository.sentNotifications.collectAsState()
+    val readIds by NotificationHelper.readNotificationIdsFlow.collectAsState()
+    val unreadCount = remember(sentNotifs, readIds) {
+        sentNotifs.count { !readIds.contains(it.id) }
+    }
+
     TopAppBar(
         title = {
             Row(
@@ -183,14 +190,23 @@ fun HomeTopBar(
                         tint = Color.White
                     )
                 }
-                // Red badge dot
-                Box(
-                    modifier = Modifier
-                        .size(8.dp)
-                        .background(Color(0xFFE53935), CircleShape)
-                        .align(Alignment.TopEnd)
-                        .offset(x = (-10).dp, y = 10.dp)
-                )
+                if (unreadCount > 0) {
+                    Box(
+                        modifier = Modifier
+                            .size(16.dp)
+                            .background(Color(0xFFE53935), CircleShape)
+                            .align(Alignment.TopEnd)
+                            .offset(x = (-6).dp, y = 6.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = DateUtils.toBengaliDigits(unreadCount.coerceAtMost(9).toString()),
+                            color = Color.White,
+                            fontSize = 9.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                }
             }
         },
         colors = TopAppBarDefaults.topAppBarColors(containerColor = QawmiDarkGreen)
@@ -230,7 +246,7 @@ fun HeroBannerCard() {
 
             Column(modifier = Modifier.weight(1f)) {
                 Text(
-                    text = "বাংলাদেশের কওমি মাদ্রাসা\nখেদমতের বিশ্বস্ত মাধ্যম",
+                    text = AdminRepository.appContent.heroTitle,
                     fontSize = 15.sp,
                     fontWeight = FontWeight.Bold,
                     color = QawmiDarkGreen,
@@ -238,7 +254,7 @@ fun HeroBannerCard() {
                 )
                 Spacer(Modifier.height(4.dp))
                 Text(
-                    text = "শিক্ষক খুঁজুন, চাকরি খুঁজুন, খেদমত এগিয়ে নিন",
+                    text = AdminRepository.appContent.heroDescription,
                     fontSize = 11.5.sp,
                     color = Color(0xFF3E6155),
                     lineHeight = 16.sp
@@ -1332,37 +1348,205 @@ fun VerifiedMadrasahDialog(
 
 @Composable
 fun NotificationsDialog(onDismiss: () -> Unit) {
+    val context = LocalContext.current
+    val adminNotifications by AdminRepository.sentNotifications.collectAsState()
+    val readIds by NotificationHelper.readNotificationIdsFlow.collectAsState()
+    val boostPref by NotificationHelper.boostNotificationsEnabledFlow.collectAsState()
+    val appPref by NotificationHelper.applicationNotificationsEnabledFlow.collectAsState()
+    val announcePref by NotificationHelper.announcementNotificationsEnabledFlow.collectAsState()
+
+    var selectedCategory by remember { mutableStateOf("সব") }
+    var showPrefsPanel by remember { mutableStateOf(false) }
+
+    val filteredNotifications = remember(adminNotifications, selectedCategory) {
+        if (selectedCategory == "সব") {
+            adminNotifications
+        } else {
+            adminNotifications.filter { it.category.equals(selectedCategory, ignoreCase = true) }
+        }
+    }
+
+    val unreadCount = remember(adminNotifications, readIds) {
+        adminNotifications.count { !readIds.contains(it.id) }
+    }
+
     Dialog(onDismissRequest = onDismiss) {
         Card(
-            shape = RoundedCornerShape(16.dp),
+            shape = RoundedCornerShape(18.dp),
             colors = CardDefaults.cardColors(containerColor = Color.White),
-            modifier = Modifier.fillMaxWidth().padding(8.dp)
+            modifier = Modifier
+                .fillMaxWidth()
+                .heightIn(max = 600.dp)
+                .padding(4.dp)
         ) {
-            Column(modifier = Modifier.padding(18.dp)) {
-                Text(
-                    text = "বিজ্ঞপ্তি ও নোটিফিকেশন",
-                    fontSize = 17.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = QawmiDarkGreen
+            Column(
+                modifier = Modifier
+                    .padding(16.dp)
+                    .verticalScroll(rememberScrollState())
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column {
+                        Text(
+                            text = "নোটিফিকেশন কেন্দ্র",
+                            fontSize = 17.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = QawmiDarkGreen
+                        )
+                        Text(
+                            text = "অপঠিত: ${DateUtils.toBengaliDigits(unreadCount.toString())} টি • মোট: ${DateUtils.toBengaliDigits(adminNotifications.size.toString())} টি",
+                            fontSize = 11.sp,
+                            color = Color(0xFF5A786E)
+                        )
+                    }
+                    Row(horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {
+                        if (unreadCount > 0) {
+                            TextButton(
+                                onClick = {
+                                    NotificationHelper.markAllAsRead(context, adminNotifications.map { it.id })
+                                    Toast.makeText(context, "সব নোটিফিকেশন পঠিত হিসেবে চিহ্নিত হয়েছে", Toast.LENGTH_SHORT).show()
+                                },
+                                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp)
+                            ) {
+                                Text("সব পঠিত করুন", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = QawmiDarkGreen)
+                            }
+                        }
+                        IconButton(
+                            onClick = { showPrefsPanel = !showPrefsPanel },
+                            modifier = Modifier.size(32.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Tune,
+                                contentDescription = "নোটিফিকেশন পছন্দসমূহ",
+                                tint = QawmiDarkGreen,
+                                modifier = Modifier.size(18.dp)
+                            )
+                        }
+                    }
+                }
+
+                if (showPrefsPanel) {
+                    Spacer(Modifier.height(8.dp))
+                    Surface(
+                        shape = RoundedCornerShape(10.dp),
+                        color = Color(0xFFF3F8F5),
+                        border = BorderStroke(1.dp, Color(0xFFD2E5DC)),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Column(
+                            modifier = Modifier.padding(10.dp),
+                            verticalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            Text(
+                                text = "বিভাগভিত্তিক নোটিফিকেশন চালু/বন্ধ (Opt-in / Opt-out):",
+                                fontSize = 11.5.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = QawmiDarkGreen
+                            )
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text("🚀 Boost ও বিশেষ প্রচারিত বিজ্ঞপ্তি", fontSize = 12.sp)
+                                Switch(
+                                    checked = boostPref,
+                                    onCheckedChange = { NotificationHelper.setCategoryEnabled(context, "Boost", it) }
+                                )
+                            }
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text("📝 আবেদন ও নিয়োগ আপডেট", fontSize = 12.sp)
+                                Switch(
+                                    checked = appPref,
+                                    onCheckedChange = { NotificationHelper.setCategoryEnabled(context, "Applications", it) }
+                                )
+                            }
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text("📢 সাধারণ ঘোষণা (Announcements)", fontSize = 12.sp)
+                                Switch(
+                                    checked = announcePref,
+                                    onCheckedChange = { NotificationHelper.setCategoryEnabled(context, "Announcements", it) }
+                                )
+                            }
+                        }
+                    }
+                }
+
+                Spacer(Modifier.height(10.dp))
+
+                // Category Filter Chips
+                val categories = listOf(
+                    "সব" to "সব",
+                    "Boost" to "🚀 Boost",
+                    "Applications" to "📝 আবেদন",
+                    "Announcements" to "📢 ঘোষণা",
+                    "Security" to "🛡 নিরাপত্তা"
                 )
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .horizontalScroll(rememberScrollState()),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    categories.forEach { (key, label) ->
+                        val isSelected = selectedCategory == key
+                        Surface(
+                            shape = RoundedCornerShape(16.dp),
+                            color = if (isSelected) QawmiDarkGreen else Color(0xFFF0F5F2),
+                            modifier = Modifier.clickable { selectedCategory = key }
+                        ) {
+                            Text(
+                                text = label,
+                                color = if (isSelected) Color.White else Color(0xFF1F382E),
+                                fontSize = 11.5.sp,
+                                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
+                            )
+                        }
+                    }
+                }
+
                 Spacer(Modifier.height(12.dp))
 
                 Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    NotificationItem(
-                        title = "কওমি কর্মসংস্থানে স্বাগতম",
-                        description = "আপনার অ্যাকাউন্ট সক্রিয় রয়েছে। খেদমতের নিয়োগ ও আবেদন ফিড দেখুন।",
-                        time = "আজ"
-                    )
-                    NotificationItem(
-                        title = "নতুন নিয়োগ বিজ্ঞপ্তি প্রকাশিত হয়েছে",
-                        description = "দারুল উলুম কওমি মাদ্রাসায় সহকারী শিক্ষক পদে নিয়োগ প্রকাশ করা হয়েছে।",
-                        time = "২ ঘণ্টা আগে"
-                    )
-                    NotificationItem(
-                        title = "নামাজের সময়সূচী সক্রিয়",
-                        description = "ঢাকা ও বাংলাদেশের হানাফি সময়সূচী স্বয়ংক্রিয়ভাবে ওয়াক্ত নির্দেশ করছে।",
-                        time = "আজ"
-                    )
+                    if (filteredNotifications.isEmpty()) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 20.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text("এই বিভাগে কোনো নোটিফিকেশন নেই", fontSize = 13.sp, color = Color.Gray)
+                        }
+                    } else {
+                        filteredNotifications.forEach { notif ->
+                            val isRead = readIds.contains(notif.id)
+                            NotificationItem(
+                                title = notif.title,
+                                description = notif.body,
+                                time = notif.sentTime,
+                                category = notif.category,
+                                isRead = isRead,
+                                onClick = {
+                                    NotificationHelper.markAsRead(context, notif.id)
+                                    val route = notif.targetRoute.ifBlank { "khedmot" }
+                                    NotificationHelper.triggerDirectNavigation(route, notif.targetItemId)
+                                    onDismiss()
+                                }
+                            )
+                        }
+                    }
                 }
 
                 Spacer(Modifier.height(16.dp))
@@ -1381,41 +1565,104 @@ fun NotificationsDialog(onDismiss: () -> Unit) {
 }
 
 @Composable
-fun NotificationItem(title: String, description: String, time: String) {
+fun NotificationItem(
+    title: String,
+    description: String,
+    time: String,
+    category: String = "Announcements",
+    isRead: Boolean = false,
+    onClick: () -> Unit = {}
+) {
+    val categoryColor = when (category) {
+        "Boost" -> Color(0xFFB45309)
+        "Applications" -> Color(0xFF1D4ED8)
+        "Security" -> Color(0xFFB91C1C)
+        else -> QawmiDarkGreen
+    }
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .background(Color(0xFFF3F7F5), RoundedCornerShape(8.dp))
+            .background(
+                if (isRead) Color(0xFFF7F9F8) else Color(0xFFEAF5F0),
+                RoundedCornerShape(10.dp)
+            )
+            .border(
+                width = if (isRead) 0.5.dp else 1.dp,
+                color = if (isRead) Color(0xFFE0E8E4) else Color(0xFF8CCAB0),
+                shape = RoundedCornerShape(10.dp)
+            )
+            .clickable { onClick() }
             .padding(10.dp),
         verticalAlignment = Alignment.Top
     ) {
         Icon(
-            imageVector = Icons.Default.NotificationsActive,
+            imageVector = when (category) {
+                "Boost" -> Icons.Default.AutoAwesome
+                "Applications" -> Icons.Default.Assignment
+                "Security" -> Icons.Default.Security
+                else -> Icons.Default.NotificationsActive
+            },
             contentDescription = null,
-            tint = QawmiDarkGreen,
+            tint = categoryColor,
             modifier = Modifier.size(20.dp).padding(top = 2.dp)
         )
         Spacer(Modifier.width(10.dp))
         Column(modifier = Modifier.weight(1f)) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                Text(
-                    text = title,
-                    fontSize = 13.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = QawmiDarkGreen
-                )
+                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
+                    if (!isRead) {
+                        Box(
+                            modifier = Modifier
+                                .size(7.dp)
+                                .background(Color(0xFFE53935), CircleShape)
+                        )
+                        Spacer(Modifier.width(5.dp))
+                    }
+                    Text(
+                        text = title,
+                        fontSize = 13.sp,
+                        fontWeight = if (isRead) FontWeight.SemiBold else FontWeight.Bold,
+                        color = QawmiDarkGreen
+                    )
+                }
                 Text(text = time, fontSize = 10.sp, color = Color.Gray)
             }
-            Spacer(Modifier.height(2.dp))
+            Spacer(Modifier.height(3.dp))
             Text(
                 text = description,
                 fontSize = 11.5.sp,
-                color = Color(0xFF5A786E),
+                color = Color(0xFF4A6358),
                 lineHeight = 15.sp
             )
+            Spacer(Modifier.height(4.dp))
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Surface(
+                    shape = RoundedCornerShape(4.dp),
+                    color = categoryColor.copy(alpha = 0.12f)
+                ) {
+                    Text(
+                        text = category,
+                        fontSize = 9.5.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = categoryColor,
+                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                    )
+                }
+                Text(
+                    text = "সংশ্লিষ্ট পেজে যান →",
+                    fontSize = 10.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = QawmiDarkGreen
+                )
+            }
         }
     }
 }

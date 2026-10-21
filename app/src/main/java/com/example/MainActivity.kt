@@ -69,6 +69,8 @@ object AppSession {
 }
 
 class MainActivity : ComponentActivity() {
+    private val deepLinkRouteState = mutableStateOf<String?>(null)
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         try {
@@ -76,23 +78,84 @@ class MainActivity : ComponentActivity() {
         } catch (e: Exception) {
             android.util.Log.e("AuthDebug", "Firebase init error: ${e.message}")
         }
+        deepLinkRouteState.value = intent?.getStringExtra(NotificationHelper.EXTRA_TARGET_ROUTE)
         enableEdgeToEdge()
         setContent {
             KaomiKormoTheme(darkTheme = false) {
-                AppNavigation()
+                val pendingRoute by deepLinkRouteState
+                AppNavigation(
+                    deepLinkRoute = pendingRoute,
+                    onConsumeDeepLink = { deepLinkRouteState.value = null }
+                )
             }
+        }
+    }
+
+    override fun onNewIntent(intent: android.content.Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        intent.getStringExtra(NotificationHelper.EXTRA_TARGET_ROUTE)?.let {
+            deepLinkRouteState.value = it
         }
     }
 }
 
 @Composable
-fun AppNavigation() {
+fun AppNavigation(
+    deepLinkRoute: String? = null,
+    onConsumeDeepLink: () -> Unit = {}
+) {
     val navController = rememberNavController()
     val context = LocalContext.current
     val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
     val coroutineScope = rememberCoroutineScope()
     val auth = remember { FirebaseAuth.getInstance() }
-    val currentUser = auth.currentUser
+    var currentUser by remember { mutableStateOf(auth.currentUser) }
+
+    val notifPermissionLauncher = androidx.activity.compose.rememberLauncherForActivityResult(
+        contract = androidx.activity.result.contract.ActivityResultContracts.RequestPermission()
+    ) { granted ->
+        NotificationHelper.setNotificationsEnabled(context, granted)
+    }
+
+    DisposableEffect(auth) {
+        val listener = FirebaseAuth.AuthStateListener { firebaseAuth ->
+            currentUser = firebaseAuth.currentUser
+            FirebaseSyncManager.onAuthStateChanged()
+        }
+        auth.addAuthStateListener(listener)
+        onDispose {
+            auth.removeAuthStateListener(listener)
+        }
+    }
+    LaunchedEffect(Unit) {
+        AdminRepository.init(context)
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU &&
+            !NotificationHelper.hasNotificationPermission(context)
+        ) {
+            try {
+                notifPermissionLauncher.launch(android.Manifest.permission.POST_NOTIFICATIONS)
+            } catch (_: Exception) {}
+        }
+    }
+    val inAppDeepLinkRoute by NotificationHelper.pendingDeepLinkRoute.collectAsState()
+    LaunchedEffect(deepLinkRoute, inAppDeepLinkRoute, currentUser) {
+        val target = deepLinkRoute ?: inAppDeepLinkRoute
+        if (!target.isNullOrBlank() && currentUser != null) {
+            val validRoutes = setOf("home", "feed", "khedmot", "abedon", "madrasah", "profile", "admin_panel")
+            if (target in validRoutes) {
+                navController.navigate(target) {
+                    launchSingleTop = true
+                }
+            }
+            onConsumeDeepLink()
+            NotificationHelper.consumeDeepLink()
+        }
+    }
+    val adminUsers by AdminRepository.adminUsers.collectAsState()
+    val isAdminUser = remember(currentUser?.email, adminUsers) {
+        AdminRepository.isUserAdmin(currentUser?.email)
+    }
 
     val items = listOf(
         "হোম" to Icons.Default.Home,
@@ -242,12 +305,8 @@ fun AppNavigation() {
 
                     Spacer(Modifier.height(4.dp))
 
-                    // 2. Menu Items List
-                    val menuItems = listOf(
-                        Triple("এডমিন প্যানেল", Icons.Default.AdminPanelSettings) {
-                            coroutineScope.launch { drawerState.close() }
-                            navController.navigate("admin_panel")
-                        },
+                    // 2. Menu Items List (Admin Panel shown strictly to authorized Admin accounts)
+                    val baseMenuItems = listOf(
                         Triple("সেটিংস", Icons.Default.Settings) { showSettingsDialog = true },
                         Triple("নোটিফিকেশন সেটিংস", Icons.Default.Notifications) { showNotifSettingsDialog = true },
                         Triple("অ্যাপ সম্পর্কে", Icons.Default.Info) { showAboutDialog = true },
@@ -267,6 +326,16 @@ fun AppNavigation() {
                         },
                         Triple("মতামত দিন", Icons.Default.Star) { showFeedbackDialog = true }
                     )
+                    val menuItems = if (isAdminUser) {
+                        listOf(
+                            Triple("এডমিন প্যানেল", Icons.Default.AdminPanelSettings) {
+                                coroutineScope.launch { drawerState.close() }
+                                navController.navigate("admin_panel")
+                            }
+                        ) + baseMenuItems
+                    } else {
+                        baseMenuItems
+                    }
 
                     menuItems.forEach { (title, icon, onClickAction) ->
                         Row(
@@ -510,7 +579,13 @@ fun AppNavigation() {
                 }
                 composable("admin_panel") {
                     AdminPanelScreen(
-                        onNavigateBack = { navController.popBackStack() }
+                        onNavigateBack = {
+                            if (!navController.popBackStack()) {
+                                navController.navigate("home") {
+                                    popUpTo("home") { inclusive = true }
+                                }
+                            }
+                        }
                     )
                 }
             }
@@ -555,18 +630,93 @@ fun AppNavigation() {
     }
 
     if (showNotifSettingsDialog) {
+        var notifEnabled by remember { mutableStateOf(NotificationHelper.isNotificationsEnabled(context)) }
+        val boostEnabled by NotificationHelper.boostNotificationsEnabledFlow.collectAsState()
+        val appEnabled by NotificationHelper.applicationNotificationsEnabledFlow.collectAsState()
+        val announceEnabled by NotificationHelper.announcementNotificationsEnabledFlow.collectAsState()
+        val hasOsPermission = NotificationHelper.hasNotificationPermission(context)
+        var deviceToken by remember { mutableStateOf(NotificationHelper.getOrCreateDeviceToken(context)) }
         AlertDialog(
             onDismissRequest = { showNotifSettingsDialog = false },
-            title = { Text("নোটিফিকেশন সেটিংস", fontWeight = FontWeight.Bold, color = Color(0xFF075747)) },
+            title = { Text("নোটিফিকেশন সেটিংস ও পছন্দসমূহ", fontWeight = FontWeight.Bold, color = Color(0xFF075747)) },
             text = {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text("সকল পুশ নোটিফিকেশন")
-                    var notifEnabled by remember { mutableStateOf(true) }
-                    Switch(checked = notifEnabled, onCheckedChange = { notifEnabled = it })
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text("সকল পুশ নোটিফিকেশন", fontWeight = FontWeight.SemiBold)
+                        Switch(
+                            checked = notifEnabled,
+                            onCheckedChange = { enabled ->
+                                notifEnabled = enabled
+                                NotificationHelper.setNotificationsEnabled(context, enabled)
+                                if (enabled && android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU && !hasOsPermission) {
+                                    try {
+                                        notifPermissionLauncher.launch(android.Manifest.permission.POST_NOTIFICATIONS)
+                                    } catch (_: Exception) {}
+                                }
+                            }
+                        )
+                    }
+                    HorizontalDivider(color = Color(0xFFE0EBE5))
+                    Text("বিভাগভিত্তিক নিয়ন্ত্রণ (Opt-in / Opt-out):", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Color(0xFF075747))
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text("🚀 Boost ও বিশেষ প্রচারিত বিজ্ঞপ্তি", fontSize = 13.sp)
+                        Switch(
+                            checked = boostEnabled,
+                            enabled = notifEnabled,
+                            onCheckedChange = { NotificationHelper.setCategoryEnabled(context, "Boost", it) }
+                        )
+                    }
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text("📝 আবেদন ও নিয়োগ আপডেট", fontSize = 13.sp)
+                        Switch(
+                            checked = appEnabled,
+                            enabled = notifEnabled,
+                            onCheckedChange = { NotificationHelper.setCategoryEnabled(context, "Applications", it) }
+                        )
+                    }
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text("📢 সাধারণ ঘোষণা (Announcements)", fontSize = 13.sp)
+                        Switch(
+                            checked = announceEnabled,
+                            enabled = notifEnabled,
+                            onCheckedChange = { NotificationHelper.setCategoryEnabled(context, "Announcements", it) }
+                        )
+                    }
+                    HorizontalDivider(color = Color(0xFFE0EBE5))
+                    Text(
+                        text = if (notifEnabled && hasOsPermission) "স্ট্যাটাস: সক্রিয় (FCM টোকেন সংযুক্ত: ${deviceToken.take(16)}...)"
+                        else if (!hasOsPermission) "স্ট্যাটাস: ডিভাইস নোটিফিকেশন অনুমতি প্রয়োজন"
+                        else "স্ট্যাটাস: পুশ নোটিফিকেশন বন্ধ রয়েছে",
+                        fontSize = 11.5.sp,
+                        color = Color(0xFF477F73)
+                    )
+                    OutlinedButton(
+                        onClick = {
+                            deviceToken = NotificationHelper.refreshDeviceToken(context)
+                            Toast.makeText(context, "ডিভাইস টোকেন নবায়ন ও Firebase-এ সিঙ্ক করা হয়েছে!", Toast.LENGTH_SHORT).show()
+                        },
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Icon(Icons.Default.Refresh, contentDescription = null, modifier = Modifier.size(16.dp))
+                        Spacer(Modifier.width(6.dp))
+                        Text("ডিভাইস টোকেন রিফ্রেশ করুন", fontSize = 12.sp)
+                    }
                 }
             },
             confirmButton = {
@@ -607,10 +757,7 @@ fun AppNavigation() {
             text = {
                 Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
                     Text(
-                        text = "১. অ্যাপ ব্যবহারের সাধারণ নিয়ম মেনে চলতে হবে।\n" +
-                                "২. খেদমতের বিজ্ঞপ্তি ও আবেদন প্রকাশের ক্ষেত্রে সম্পূর্ণ সত্য ও নির্ভুল তথ্য প্রদান করতে হবে।\n" +
-                                "৩. ভুয়া বিজ্ঞপ্তি, হয়রানিমূলক পোস্ট বা প্রতারণা সম্পূর্ণ নিষিদ্ধ।\n" +
-                                "৪. ব্যবহারকারী তার নিজ অ্যাকাউন্টের নিরাপত্তা ও তথ্যের জন্য দায়ী থাকবেন।",
+                        text = AdminRepository.appContent.termsText,
                         fontSize = 13.sp,
                         color = Color(0xFF075747)
                     )
@@ -631,7 +778,7 @@ fun AppNavigation() {
             text = {
                 Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
                     Text(
-                        text = "আপনার ব্যক্তিগত তথ্য যেমন নাম, ইমেইল ও প্রোফাইল ডেটা সম্পূর্ণ নিরাপদে সংরক্ষিত হয়। আমরা আপনার অনুমতি ছাড়া কোনো তথ্য তৃতীয় পক্ষের সাথে শেয়ার করি না।",
+                        text = AdminRepository.appContent.privacyText,
                         fontSize = 13.sp,
                         color = Color(0xFF075747)
                     )
@@ -651,8 +798,8 @@ fun AppNavigation() {
             title = { Text("সাহায্য ও সাধারণ প্রশ্নোত্তর", fontWeight = FontWeight.Bold, color = Color(0xFF075747)) },
             text = {
                 Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
-                    Text("প্রশ্ন ১: কীভাবে খেদমতের বিজ্ঞপ্তি খুঁজব?\nউত্তর: 'খেদমত' ট্যাবে গিয়ে আপনার পছন্দমতো ফিল্টার করে দেখতে পারেন।\n\n" +
-                            "প্রশ্ন ২: কীভাবে আবেদন করব?\nউত্তর: যেকোনো বিজ্ঞপ্তিতে প্রবেশ করে সহজে আবেদন জমা দিতে পারবেন।",
+                    Text(
+                        text = AdminRepository.appContent.faqText,
                         fontSize = 13.sp,
                         color = Color(0xFF075747)
                     )
@@ -667,26 +814,66 @@ fun AppNavigation() {
     }
 
     if (showContactDialog) {
+        var issueSubject by remember { mutableStateOf("") }
+        var issueDesc by remember { mutableStateOf("") }
         AlertDialog(
             onDismissRequest = { showContactDialog = false },
             title = { Text("যোগাযোগ ও সমস্যা জানান", fontWeight = FontWeight.Bold, color = Color(0xFF075747)) },
             text = {
                 Column {
-                    Text("কোনো সমস্যা বা ভুয়া বিজ্ঞপ্তির সন্ধান পেলে আমাদের জানান:\n\nইমেইল: support@kawmikormo.org\nহেল্পলাইন: +৮৮০ ৯৬০০০০০০০",
-                        fontSize = 13.sp,
+                    Text(
+                        text = "কোনো সমস্যা বা ভুয়া বিজ্ঞপ্তির সন্ধান পেলে আমাদের জানান:\nইমেইল: ${AdminRepository.appContent.contactEmail}\nহেল্পলাইন: ${AdminRepository.appContent.contactPhone}",
+                        fontSize = 12.5.sp,
                         color = Color(0xFF075747)
+                    )
+                    Spacer(Modifier.height(10.dp))
+                    OutlinedTextField(
+                        value = issueSubject,
+                        onValueChange = { issueSubject = it },
+                        label = { Text("বিষয়") },
+                        placeholder = { Text("যেমন: বিজ্ঞপ্তি যাচাই / লগইন সমস্যা") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    Spacer(Modifier.height(6.dp))
+                    OutlinedTextField(
+                        value = issueDesc,
+                        onValueChange = { issueDesc = it },
+                        label = { Text("সমস্যার বিবরণ") },
+                        placeholder = { Text("বিস্তারিত লিখুন...") },
+                        modifier = Modifier.fillMaxWidth()
                     )
                 }
             },
             confirmButton = {
+                Button(
+                    onClick = {
+                        if (issueDesc.isNotBlank()) {
+                            AdminRepository.submitSupportTicket(
+                                reporterName = currentUser?.displayName ?: "ব্যবহারকারী",
+                                reporterContact = currentUser?.email ?: "",
+                                subject = issueSubject.ifBlank { "ব্যবহারকারীর অভিযোগ / সহায়তা" },
+                                description = issueDesc
+                            )
+                            Toast.makeText(context, "আপনার অভিযোগ/বার্তা Admin প্যানেলে জমা হয়েছে!", Toast.LENGTH_SHORT).show()
+                        }
+                        showContactDialog = false
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF075747))
+                ) {
+                    Text("জমা দিন", color = Color.White, fontWeight = FontWeight.Bold)
+                }
+            },
+            dismissButton = {
                 TextButton(onClick = { showContactDialog = false }) {
-                    Text("ঠিক আছে", color = Color(0xFF075747), fontWeight = FontWeight.Bold)
+                    Text("বন্ধ করুন", color = Color(0xFF075747))
                 }
             }
         )
     }
 
     if (showFeedbackDialog) {
+        var feedbackText by remember { mutableStateOf("") }
         AlertDialog(
             onDismissRequest = { showFeedbackDialog = false },
             title = { Text("মতামত দিন", fontWeight = FontWeight.Bold, color = Color(0xFF075747)) },
@@ -694,7 +881,6 @@ fun AppNavigation() {
                 Column {
                     Text("আমাদের অ্যাপ সম্পর্কে আপনার মূল্যবান মতামত বা পরামর্শ দিন:", fontSize = 13.sp, color = Color(0xFF075747))
                     Spacer(Modifier.height(10.dp))
-                    var feedbackText by remember { mutableStateOf("") }
                     OutlinedTextField(
                         value = feedbackText,
                         onValueChange = { feedbackText = it },
@@ -707,6 +893,14 @@ fun AppNavigation() {
             confirmButton = {
                 Button(
                     onClick = {
+                        if (feedbackText.isNotBlank()) {
+                            AdminRepository.submitSupportTicket(
+                                reporterName = currentUser?.displayName ?: "ব্যবহারকারী",
+                                reporterContact = currentUser?.email ?: "",
+                                subject = "অ্যাপ ব্যবহারকারীর মতামত",
+                                description = feedbackText
+                            )
+                        }
                         showFeedbackDialog = false
                         Toast.makeText(context, "মতামত পাঠানোর জন্য জাযাকাল্লাহ খায়ের!", Toast.LENGTH_SHORT).show()
                     },
@@ -732,6 +926,8 @@ fun AppNavigation() {
                 Button(
                     onClick = {
                         showLogoutConfirmDialog = false
+                        NotificationHelper.onUserLogout(context)
+                        FirebaseSyncManager.stopRealtimeSync()
                         auth.signOut()
                         navController.navigate("auth") {
                             popUpTo(0) { inclusive = true }

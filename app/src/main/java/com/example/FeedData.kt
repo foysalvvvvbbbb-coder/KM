@@ -19,7 +19,10 @@ data class FeedItem(
     val secondaryInfo: String, // আবেদনের শেষ তারিখ অথবা পছন্দের জেলা
     val timeAgo: String,
     val isVerified: Boolean = true,
-    val contactPhone: String = "01712345678"
+    val contactPhone: String = "01712345678",
+    val viewsCount: Int = 0,
+    val clicksCount: Int = 0,
+    val applicationsCount: Int = 0
 )
 
 object FeedRepository {
@@ -40,7 +43,10 @@ object FeedRepository {
             secondaryInfo = "২০ অক্টোবর ২০২৫",
             timeAgo = "২ ঘণ্টা আগে",
             isVerified = true,
-            contactPhone = "01711223344"
+            contactPhone = "01711223344",
+            viewsCount = 42,
+            clicksCount = 18,
+            applicationsCount = 6
         ),
         FeedItem(
             id = "post_2",
@@ -66,7 +72,10 @@ object FeedRepository {
             secondaryInfo = "২৫ অক্টোবর ২০২৫",
             timeAgo = "৬ ঘণ্টা আগে",
             isVerified = true,
-            contactPhone = "01933445566"
+            contactPhone = "01933445566",
+            viewsCount = 29,
+            clicksCount = 11,
+            applicationsCount = 4
         ),
         FeedItem(
             id = "post_4",
@@ -92,7 +101,10 @@ object FeedRepository {
             secondaryInfo = "১৮ অক্টোবর ২০২৫",
             timeAgo = "১০ ঘণ্টা আগে",
             isVerified = true,
-            contactPhone = "01555667788"
+            contactPhone = "01555667788",
+            viewsCount = 65,
+            clicksCount = 27,
+            applicationsCount = 9
         )
     )
 
@@ -132,13 +144,63 @@ object FeedRepository {
     fun isApplied(postId: String): Boolean = appliedIds.contains(postId)
 
     fun applyToPost(context: Context, postId: String) {
-        appliedIds.add(postId)
+        val isFirstTime = appliedIds.add(postId)
         val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
         prefs.edit().putStringSet(APPLIED_KEY, appliedIds.toSet()).apply()
+
+        if (isFirstTime) {
+            AdminRepository.recordNoticeInteraction(postId, "apply")
+            val targetPost = posts.find { it.id == postId }
+            if (targetPost != null) {
+                AdminRepository.recordAuditLog(
+                    actorEmail = "আবেদনকারী",
+                    action = "'${targetPost.title}' (${targetPost.role})-এ আবেদন জমা দেওয়া হয়েছে",
+                    category = "Application"
+                )
+                AdminRepository.triggerEventNotification(
+                    title = "আবেদন সফলভাবে গৃহীত হয়েছে",
+                    body = "${targetPost.title}-এর '${targetPost.role}' পদে আপনার আবেদন জমা হয়েছে।",
+                    targetAudience = "খেদমতপ্রার্থী",
+                    targetRoute = "abedon",
+                    targetItemId = postId,
+                    eventKey = "apply_post_$postId",
+                    category = "Applications"
+                )
+            }
+        }
     }
 
     fun addPost(item: FeedItem) {
+        if (posts.any { it.id == item.id }) return
         posts.add(0, item)
+        AdminRepository.syncWithFeedRepository()
+        if (item.type == FeedItemType.MADRASAH_NOTICE) {
+            AdminRepository.noticesList.value.find { it.postId == item.id }?.let { n ->
+                FirebaseSyncManager.saveNotice(n, qualification = item.qualification)
+            }
+            AdminRepository.triggerEventNotification(
+                title = "নতুন খেদমতের বিজ্ঞপ্তি: ${item.role}",
+                body = "${item.title} (${item.location})-এ নিয়োগ বিজ্ঞপ্তি প্রকাশিত হয়েছে।",
+                targetAudience = "খেদমতপ্রার্থী",
+                targetRoute = "khedmot",
+                targetItemId = item.id,
+                eventKey = "new_notice_${item.id}",
+                category = "Announcements"
+            )
+        } else {
+            AdminRepository.applicationsList.value.find { it.postId == item.id }?.let { a ->
+                FirebaseSyncManager.saveApplication(a, preferredDistricts = item.secondaryInfo)
+            }
+            AdminRepository.triggerEventNotification(
+                title = "নতুন খেদমতপ্রার্থীর আবেদন: ${item.role}",
+                body = "${item.title} (${item.qualification}) খেদমতের জন্য আবেদন প্রকাশ করেছেন।",
+                targetAudience = "মাদ্রাসা প্রতিনিধি",
+                targetRoute = "abedon",
+                targetItemId = item.id,
+                eventKey = "new_cand_${item.id}",
+                category = "Applications"
+            )
+        }
     }
 
     fun getBookmarkedPosts(): List<FeedItem> {

@@ -49,73 +49,46 @@ fun MadrasahScreen(
 ) {
     val context = LocalContext.current
     var searchQuery by remember { mutableStateOf("") }
+    LaunchedEffect(Unit) {
+        AdminRepository.init(context)
+    }
+    val adminMadrasahs by AdminRepository.madrasahsList.collectAsState()
 
-    val madrasahList = remember {
-        listOf(
+    val madrasahList = remember(adminMadrasahs) {
+        adminMadrasahs.filter { it.verificationStatus != "প্রত্যাখ্যাত" }.map { m ->
+            val est = when (m.id) {
+                "m1" -> "১৯০১ খ্রিষ্টাব্দ"
+                "m2" -> "১৯৩৮ খ্রিষ্টাব্দ"
+                "m3" -> "১৯৮০ খ্রিষ্টাব্দ"
+                "m4" -> "১৯৫৬ খ্রিষ্টাব্দ"
+                "m5" -> "১৯৮৫ খ্রিষ্টাব্দ"
+                "m6" -> "১৯৭২ খ্রিষ্টাব্দ"
+                else -> "নিবন্ধিত (${m.regNumber.ifBlank { "কওমি মাদ্রাসা" }})"
+            }
+            val stu = when (m.id) {
+                "m1" -> "৭,০০০+ তালিবুল ইলম"
+                "m2" -> "৫,০০০+ তালিবুল ইলম"
+                "m3" -> "৪,০০০+ তালিবুল ইলম"
+                "m4" -> "২,৫০০+ তালিবুল ইলম"
+                "m5" -> "২,০০০+ তালিবুল ইলম"
+                "m6" -> "১,৫০০+ তালিবুল ইলম"
+                else -> "সক্রিয় শিক্ষা বিভাগ"
+            }
             MadrasahDetail(
-                id = "m1",
-                name = "দারুল উলুম মুঈনুল ইসলাম (হাটহাজারী মাদ্রাসা)",
-                location = "হাটহাজারী, চট্টগ্রাম",
-                established = "১৯০১ খ্রিষ্টাব্দ",
-                muhtamim = "মুফতি খলীল আহমদ কাসেমী (দা.বা.)",
-                departments = "দাওরায়ে হাদীস, ইফতা, উলুমুল কুরআন, হিফজখানা",
-                phone = "01819112233",
-                students = "৭,০০০+ তালিবুল ইলম"
-            ),
-            MadrasahDetail(
-                id = "m2",
-                name = "আল জামিয়া আল ইসলামিয়া পটিয়া",
-                location = "পটিয়া, চট্টগ্রাম",
-                established = "১৯৩৮ খ্রিষ্টাব্দ",
-                muhtamim = "মুফতি আবদুল হালিম বোখারী রহ. উত্তরসূরি",
-                departments = "দাওরায়ে হাদীস, তাখাসসুসাত, আরবি সাহিত্য, কারিগরি",
-                phone = "01818223344",
-                students = "৫,০০০+ তালিবুল ইলম"
-            ),
-            MadrasahDetail(
-                id = "m3",
-                name = "জামিয়া ইসলামিয়া দারুল উলুম মাদানিয়া",
-                location = "যাত্রাবাড়ী, ঢাকা",
-                established = "১৯৮০ খ্রিষ্টাব্দ",
-                muhtamim = "আল্লামা মাহমুদুল হাসান (দা.বা.)",
-                departments = "দাওরায়ে হাদীস, ইফতা, কিরাত, দাওয়াহ",
-                phone = "01711334455",
-                students = "৪,০০০+ তালিবুল ইলম"
-            ),
-            MadrasahDetail(
-                id = "m4",
-                name = "জামিয়া শারইয়্যাহ মালিবাগ",
-                location = "মালিবাগ, ঢাকা",
-                established = "১৯৫৬ খ্রিষ্টাব্দ",
-                muhtamim = "মুহতামিম ও শায়খুল হাদীস পরিষদ",
-                departments = "দাওরায়ে হাদীস, তাফসীর, ফিকহুল ইসলামি",
-                phone = "01911445566",
-                students = "২,৫০০+ তালিবুল ইলম"
-            ),
-            MadrasahDetail(
-                id = "m5",
-                name = "আল জামিয়াতুল আরাবিয়া দারুল কুরআন",
-                location = "সিলেট সদর, সিলেট",
-                established = "১৯৮৫ খ্রিষ্টাব্দ",
-                muhtamim = "মাওলানা আব্দুল করিম (দা.বা.)",
-                departments = "দাওরায়ে হাদীস, তাজবীদ, নূরানী শিক্ষক প্রশিক্ষণ",
-                phone = "01722556677",
-                students = "২,০০০+ তালিবুল ইলম"
-            ),
-            MadrasahDetail(
-                id = "m6",
-                name = "জামিয়া ইসলামিয়া আরাবিয়া",
-                location = "বানারীপাড়া, বরিশাল",
-                established = "১৯৭২ খ্রিষ্টাব্দ",
-                muhtamim = "মাওলানা আব্দুর রহমান (দা.বা.)",
-                departments = "দাওরায়ে হাদীস, হিফজুল কুরআন, কিতাব বিভাগ",
-                phone = "01511667788",
-                students = "১,৫০০+ তালিবুল ইলম"
+                id = m.id,
+                name = m.name,
+                location = m.location,
+                established = est,
+                muhtamim = m.muhtamim,
+                departments = m.departments,
+                phone = m.phone,
+                students = stu,
+                isVerified = m.verificationStatus == "যাচাইকৃত"
             )
-        )
+        }
     }
 
-    val filteredList = remember(searchQuery) {
+    val filteredList = remember(searchQuery, madrasahList) {
         if (searchQuery.isBlank()) madrasahList
         else madrasahList.filter {
             it.name.contains(searchQuery, ignoreCase = true) ||

@@ -1,0 +1,165 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function userEmail() {
+      return isSignedIn() && request.auth.token.email != null
+        ? request.auth.token.email.lower()
+        : "";
+    }
+
+    function isSuperAdmin() {
+      return isSignedIn() && userEmail() == "foysalahamad204@gmail.com";
+    }
+
+    function isAllowlistedAdmin() {
+      return isSignedIn() && (
+        userEmail() == "foysalahamad102@gmail.com" ||
+        userEmail() == "foysalahamad204@gmail.com" ||
+        userEmail() == "mdfoysalahamad202@gmail.com" ||
+        userEmail() == "sumuaktar01300448147@gmail.com" ||
+        exists(/databases/$(database)/documents/admin_users/$(userEmail()))
+      );
+    }
+
+    // 1. Users Collection: Users can read/update their own profile & notification preferences;
+    //    Only allowlisted Admins can change status or role of any user.
+    match /users/{userId} {
+      allow read: if isSignedIn() && (request.auth.uid == userId || isAllowlistedAdmin());
+      allow create: if isSignedIn() && (
+        (request.auth.uid == userId &&
+         request.resource.data.role != "Admin" &&
+         request.resource.data.role != "প্রধান Admin") ||
+        isAllowlistedAdmin()
+      );
+      allow update: if isSignedIn() && (
+        isAllowlistedAdmin() ||
+        (request.auth.uid == userId &&
+         request.resource.data.role == resource.data.role &&
+         request.resource.data.status == resource.data.status)
+      );
+      allow delete: if isSuperAdmin();
+    }
+
+    // 2. Madrasahs Collection: Readable by authenticated users; creation allowed for registration;
+    //    Verification status changes restricted to Admins.
+    match /madrasahs/{madrasahId} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn() && (
+        isAllowlistedAdmin() ||
+        request.resource.data.verificationStatus == "অপেক্ষমাণ"
+      );
+      allow update, delete: if isAllowlistedAdmin();
+    }
+
+    // 3. Notices Collection: Readable by authenticated users; creation allowed for signed-in users;
+    //    Approval, boost flag, and deletion controlled by Admins; signed-in users may only update analytics counters.
+    match /notices/{postId} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn() &&
+        request.resource.data.madrasahName is string &&
+        request.resource.data.roleTitle is string &&
+        request.resource.data.isBoosted != true;
+      allow update: if isAllowlistedAdmin() || (
+        isSignedIn() &&
+        request.resource.data.status == resource.data.status &&
+        request.resource.data.isBoosted == resource.data.isBoosted &&
+        request.resource.data.madrasahName == resource.data.madrasahName &&
+        request.resource.data.roleTitle == resource.data.roleTitle
+      );
+      allow delete: if isAllowlistedAdmin();
+    }
+
+    // 4. Applications Collection: Readable by authenticated users; creation allowed for candidates;
+    //    Status approval/rejection controlled by Admins.
+    match /applications/{postId} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn() &&
+        request.resource.data.candidateName is string &&
+        request.resource.data.roleTitle is string;
+      allow update, delete: if isAllowlistedAdmin();
+    }
+
+    // 5. Boost Requests Collection: Users can submit boost requests (Pending);
+    //    Only Admins can approve, activate, pause, resume, reject, or cancel; signed-in users may only update analytics counters.
+    match /boost_requests/{boostId} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn() && (
+        isAllowlistedAdmin() ||
+        request.resource.data.status == "Pending"
+      );
+      allow update: if isAllowlistedAdmin() || (
+        isSignedIn() &&
+        request.resource.data.status == resource.data.status &&
+        request.resource.data.durationDays == resource.data.durationDays &&
+        request.resource.data.expiryDate == resource.data.expiryDate
+      );
+      allow delete: if isAllowlistedAdmin();
+    }
+
+    // 6. Notifications Collection: Readable by authenticated users;
+    //    Broadcast announcements can only be created/modified by Admins;
+    //    Event notifications for notices/applications are validated.
+    match /notifications/{notifId} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn() && (
+        isAllowlistedAdmin() ||
+        (request.resource.data.targetAudience != "সকল ব্যবহারকারী" &&
+         request.resource.data.title is string &&
+         request.resource.data.body is string)
+      );
+      allow update, delete: if isAllowlistedAdmin();
+    }
+
+    // 7. Dynamic Form Builder Configurations: Readable by all signed-in users; writable only by Admins.
+    match /form_configs/{fieldId} {
+      allow read: if isSignedIn();
+      allow write: if isAllowlistedAdmin();
+    }
+
+    // 8. App Content, Telegram & Permission Settings: Readable by signed-in users; writable only by Admins.
+    match /app_config/{docId} {
+      allow read: if isSignedIn();
+      allow write: if isAllowlistedAdmin();
+    }
+
+    // 9. Admin Roles & Allowlist: Readable by Admins; writable only by Super Admin.
+    match /admin_users/{emailKey} {
+      allow read: if isAllowlistedAdmin();
+      allow write: if isSuperAdmin();
+    }
+
+    // 10. Support Tickets & Complaints: Signed-in users can create tickets; only Admins can resolve/update.
+    match /support_tickets/{ticketId} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn() &&
+        request.resource.data.subject is string &&
+        request.resource.data.description is string;
+      allow update, delete: if isAllowlistedAdmin();
+    }
+
+    // 11. Audit Logs & Config Backups: Strictly restricted to allowlisted Admins.
+    match /audit_logs/{logId} {
+      allow read, create: if isAllowlistedAdmin();
+      allow update, delete: if false;
+    }
+
+    match /config_backups/{backupId} {
+      allow read, write: if isAllowlistedAdmin();
+    }
+
+    // 12. Telegram Secure Vault Metadata & Delivery Logs: Strictly restricted to allowlisted Admins.
+    match /telegram_vault/{docId} {
+      allow read, write: if isAllowlistedAdmin();
+    }
+
+    match /telegram_logs/{logId} {
+      allow read, create: if isAllowlistedAdmin();
+      allow update, delete: if isSuperAdmin();
+    }
+  }
+}

@@ -53,6 +53,7 @@ fun FeedScreen(
     val context = LocalContext.current
     LaunchedEffect(Unit) {
         FeedRepository.init(context)
+        AdminRepository.checkExpiredBoosts()
     }
 
     var selectedFilter by remember(initialFilter) { mutableStateOf(initialFilter) }
@@ -61,15 +62,48 @@ fun FeedScreen(
     }
     var selectedDistrict by remember { mutableStateOf<String?>(null) }
     var showDistrictDialog by remember { mutableStateOf(false) }
+    var showNotifCenter by remember { mutableStateOf(false) }
 
     // Dialog state
     var applyingPost by remember { mutableStateOf<FeedItem?>(null) }
     var viewingCandidate by remember { mutableStateOf<FeedItem?>(null) }
+    var boostingPost by remember { mutableStateOf<FeedItem?>(null) }
 
     val allPosts = FeedRepository.posts
+    val adminNotices by AdminRepository.noticesList.collectAsState()
+    val boostRequests by AdminRepository.boostRequests.collectAsState()
+    val sentNotifs by AdminRepository.sentNotifications.collectAsState()
+    val readIds by NotificationHelper.readNotificationIdsFlow.collectAsState()
+    val unreadCount = remember(sentNotifs, readIds) {
+        sentNotifs.count { !readIds.contains(it.id) }
+    }
 
-    val filteredPosts = remember(selectedFilter, selectedDistrict, allPosts.size) {
+    val boostedIds = remember(adminNotices, boostRequests) {
+        val activeBoostIds = boostRequests
+            .filter { it.status == "Active" || it.status == "Approved" }
+            .map { it.noticeId }
+            .toSet()
+        val approvedNoticeIds = adminNotices
+            .filter { it.status == "অনুমোদিত" }
+            .map { it.postId }
+            .toSet()
+        val noticeBoostIds = adminNotices
+            .filter { it.isBoosted && it.status == "অনুমোদিত" }
+            .map { it.postId }
+            .toSet()
+        (activeBoostIds.intersect(approvedNoticeIds)) + noticeBoostIds
+    }
+
+    val rejectedOrPendingNoticeIds = remember(adminNotices) {
+        adminNotices.filter { it.status != "অনুমোদিত" }.map { it.postId }.toSet()
+    }
+
+    val filteredPosts = remember(selectedFilter, selectedDistrict, allPosts.size, boostedIds, rejectedOrPendingNoticeIds) {
         allPosts.filter { post ->
+            // Exclude unapproved/rejected notices from public feed
+            if (post.type == FeedItemType.MADRASAH_NOTICE && post.id in rejectedOrPendingNoticeIds) {
+                return@filter false
+            }
             val matchesType = when (selectedFilter) {
                 "নিয়োগ বিজ্ঞপ্তি", "খেদমতের বিজ্ঞপ্তি" -> post.type == FeedItemType.MADRASAH_NOTICE
                 "আবেদন", "খেদমতের আবেদন" -> post.type == FeedItemType.CANDIDATE_APPLICATION
@@ -81,7 +115,11 @@ fun FeedScreen(
             } else true
 
             matchesType && matchesDistrict
-        }
+        }.sortedByDescending { it.id in boostedIds }
+    }
+
+    val featuredBoostedPosts = remember(filteredPosts, boostedIds) {
+        filteredPosts.filter { it.type == FeedItemType.MADRASAH_NOTICE && it.id in boostedIds }
     }
 
     Scaffold(
@@ -108,19 +146,26 @@ fun FeedScreen(
                 },
                 actions = {
                     Box(modifier = Modifier.padding(end = 6.dp)) {
-                        IconButton(onClick = { 
-                            Toast.makeText(context, "নতুন কোনো নোটিফিকেশন নেই", Toast.LENGTH_SHORT).show() 
-                        }) {
+                        IconButton(onClick = { showNotifCenter = true }) {
                             Icon(Icons.Default.Notifications, contentDescription = "বিজ্ঞপ্তি", tint = Color.White)
                         }
-                        // Red notification badge dot
-                        Box(
-                            modifier = Modifier
-                                .size(8.dp)
-                                .background(Color(0xFFE53935), CircleShape)
-                                .align(Alignment.TopEnd)
-                                .offset(x = (-10).dp, y = 10.dp)
-                        )
+                        if (unreadCount > 0) {
+                            Box(
+                                modifier = Modifier
+                                    .size(16.dp)
+                                    .background(Color(0xFFE53935), CircleShape)
+                                    .align(Alignment.TopEnd)
+                                    .offset(x = (-6).dp, y = 6.dp),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text(
+                                    text = DateUtils.toBengaliDigits(unreadCount.coerceAtMost(9).toString()),
+                                    color = Color.White,
+                                    fontSize = 9.sp,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
+                        }
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = QawmiDarkGreen)
@@ -172,11 +217,69 @@ fun FeedScreen(
                     contentPadding = PaddingValues(horizontal = 14.dp, vertical = 10.dp),
                     verticalArrangement = Arrangement.spacedBy(14.dp)
                 ) {
+                    if (featuredBoostedPosts.isNotEmpty()) {
+                        item(key = "featured_boost_header") {
+                            Surface(
+                                shape = RoundedCornerShape(12.dp),
+                                color = Color(0xFFFFF8E1),
+                                border = BorderStroke(1.dp, Color(0xFFFFD54F)),
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.SpaceBetween
+                                ) {
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Icon(
+                                            Icons.Default.AutoAwesome,
+                                            contentDescription = null,
+                                            tint = Color(0xFFB45309),
+                                            modifier = Modifier.size(18.dp)
+                                        )
+                                        Spacer(Modifier.width(6.dp))
+                                        Text(
+                                            text = "বিশেষভাবে প্রচারিত শীর্ষ বিজ্ঞপ্তি (Featured)",
+                                            fontWeight = FontWeight.Bold,
+                                            fontSize = 13.sp,
+                                            color = Color(0xFF92400E)
+                                        )
+                                    }
+                                    Surface(
+                                        shape = RoundedCornerShape(20.dp),
+                                        color = Color(0xFFFEF3C7)
+                                    ) {
+                                        Text(
+                                            text = "${DateUtils.toBengaliDigits(featuredBoostedPosts.size.toString())} টি সক্রিয়",
+                                            fontSize = 11.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            color = Color(0xFFB45309),
+                                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp)
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+
                     items(filteredPosts, key = { it.id }) { post ->
                         if (post.type == FeedItemType.MADRASAH_NOTICE) {
+                            val isBoosted = post.id in boostedIds
+                            val activeBoost = boostRequests.find {
+                                it.noticeId == post.id && (it.status == "Active" || it.status == "Approved")
+                            }
                             MadrasahNoticeCard(
                                 post = post,
-                                onApply = { applyingPost = post },
+                                isBoosted = isBoosted,
+                                activeBoost = activeBoost,
+                                onApply = {
+                                    AdminRepository.recordNoticeInteraction(post.id, "click")
+                                    applyingPost = post
+                                },
+                                onBoostRequest = {
+                                    AdminRepository.recordNoticeInteraction(post.id, "click")
+                                    boostingPost = post
+                                },
                                 onBookmarkToggle = {
                                     val isBookmarked = FeedRepository.toggleBookmark(context, post.id)
                                     val msg = if (isBookmarked) "পছন্দের খেদমতে যোগ করা হয়েছে" else "পছন্দের তালিকা থেকে সরানো হয়েছে"
@@ -203,6 +306,106 @@ fun FeedScreen(
                 }
             }
         }
+    }
+
+    if (showNotifCenter) {
+        NotificationsDialog(onDismiss = { showNotifCenter = false })
+    }
+
+    // Boost Application Dialog for FeedScreen
+    boostingPost?.let { post ->
+        var selectedDays by remember { mutableStateOf(7) }
+        var selectedScope by remember { mutableStateOf("সকল ব্যবহারকারী") }
+        val scopeOptions = listOf(
+            "সকল ব্যবহারকারী",
+            "এলাকা: ${post.location.substringBefore(",").trim()}",
+            "খেদমতপ্রার্থী"
+        )
+        AlertDialog(
+            onDismissRequest = { boostingPost = null },
+            containerColor = Color(0xFFFDFBF7),
+            title = {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Default.RocketLaunch, contentDescription = null, tint = Color(0xFFB45309))
+                    Spacer(Modifier.width(8.dp))
+                    Text("বিজ্ঞপ্তি Boost আবেদন", fontWeight = FontWeight.Bold, fontSize = 17.sp, color = QawmiTextDark)
+                }
+            },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Text(
+                        text = "${post.title} — ${post.role}",
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 14.sp,
+                        color = QawmiDarkGreen
+                    )
+                    Text(
+                        text = "অনুমোদিত হলে বিজ্ঞপ্তিটি Feed-এর উপরের Featured Section-এ “বিশেষভাবে প্রচারিত” ব্যাজসহ প্রদর্শিত হবে এবং প্রাপকদের কাছে নোটিফিকেশন যাবে।",
+                        fontSize = 12.sp,
+                        color = Color(0xFF4A5D54)
+                    )
+                    Text("বুস্টের মেয়াদ নির্বাচন করুন:", fontWeight = FontWeight.SemiBold, fontSize = 12.sp)
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        listOf(3, 7, 15, 30).forEach { d ->
+                            FilterChip(
+                                selected = selectedDays == d,
+                                onClick = { selectedDays = d },
+                                label = { Text("${DateUtils.toBengaliDigits(d.toString())} দিন", fontSize = 12.sp) }
+                            )
+                        }
+                    }
+                    Text("লক্ষ্য প্রাপক পরিধি:", fontWeight = FontWeight.SemiBold, fontSize = 12.sp)
+                    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        scopeOptions.forEach { scope ->
+                            Surface(
+                                shape = RoundedCornerShape(8.dp),
+                                color = if (selectedScope == scope) Color(0xFFE2F1E8) else Color.White,
+                                border = BorderStroke(1.dp, if (selectedScope == scope) QawmiDarkGreen else Color(0xFFD5DFD9)),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable { selectedScope = scope }
+                            ) {
+                                Text(
+                                    text = scope,
+                                    fontSize = 12.sp,
+                                    fontWeight = if (selectedScope == scope) FontWeight.Bold else FontWeight.Normal,
+                                    color = QawmiTextDark,
+                                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp)
+                                )
+                            }
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        val userEmail = com.google.firebase.auth.FirebaseAuth.getInstance().currentUser?.email ?: post.title
+                        val ok = AdminRepository.submitBoostRequest(
+                            title = "${post.role} — ${post.title}",
+                            requestedBy = userEmail,
+                            durationDays = selectedDays,
+                            noticeId = post.id,
+                            targetScope = selectedScope
+                        )
+                        if (ok) {
+                            Toast.makeText(context, "Boost আবেদন Firebase ও Admin Panel-এ জমা হয়েছে!", Toast.LENGTH_LONG).show()
+                        } else {
+                            Toast.makeText(context, "এই বিজ্ঞপ্তির জন্য ইতিমধ্যে আবেদন রয়েছে বা সীমা পূর্ণ হয়েছে।", Toast.LENGTH_LONG).show()
+                        }
+                        boostingPost = null
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFB45309))
+                ) {
+                    Text("আবেদন জমা দিন", color = Color.White, fontWeight = FontWeight.Bold)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { boostingPost = null }) {
+                    Text("বাতিল", color = Color.Gray)
+                }
+            }
+        )
     }
 
     // Apply Confirmation Dialog
@@ -320,18 +523,26 @@ fun FilterChipsRow(
 @Composable
 fun MadrasahNoticeCard(
     post: FeedItem,
+    isBoosted: Boolean = false,
+    activeBoost: BoostRequestItem? = null,
     onApply: () -> Unit,
+    onBoostRequest: () -> Unit = {},
     onBookmarkToggle: () -> Unit
 ) {
     val isBookmarked = remember(post.id) { FeedRepository.isBookmarked(post.id) }
     val isApplied = remember(post.id) { FeedRepository.isApplied(post.id) }
 
+    LaunchedEffect(post.id) {
+        AdminRepository.recordNoticeInteraction(post.id, "view")
+    }
+
     Card(
         modifier = Modifier
             .fillMaxWidth()
-            .shadow(2.dp, RoundedCornerShape(16.dp)),
+            .shadow(if (isBoosted) 5.dp else 2.dp, RoundedCornerShape(16.dp)),
         shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.cardColors(containerColor = QawmiCardBg)
+        border = if (isBoosted) BorderStroke(1.5.dp, Color(0xFFFFB300)) else null,
+        colors = CardDefaults.cardColors(containerColor = if (isBoosted) Color(0xFFFFFDF7) else QawmiCardBg)
     ) {
         Column(modifier = Modifier.padding(14.dp)) {
             // Header: Badge & Time
@@ -340,17 +551,48 @@ fun MadrasahNoticeCard(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Surface(
-                    shape = RoundedCornerShape(6.dp),
-                    color = QawmiMintPill
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Text(
-                        text = "নিয়োগ বিজ্ঞপ্তি",
-                        color = QawmiMintText,
-                        fontSize = 11.sp,
-                        fontWeight = FontWeight.Bold,
-                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
-                    )
+                    Surface(
+                        shape = RoundedCornerShape(6.dp),
+                        color = QawmiMintPill
+                    ) {
+                        Text(
+                            text = "নিয়োগ বিজ্ঞপ্তি",
+                            color = QawmiMintText,
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold,
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
+                        )
+                    }
+                    if (isBoosted) {
+                        Surface(
+                            shape = RoundedCornerShape(6.dp),
+                            color = Color(0xFFFEF3C7),
+                            border = BorderStroke(1.dp, Color(0xFFF59E0B))
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Icon(
+                                    Icons.Default.AutoAwesome,
+                                    contentDescription = null,
+                                    tint = Color(0xFFB45309),
+                                    modifier = Modifier.size(12.dp)
+                                )
+                                Spacer(Modifier.width(4.dp))
+                                Text(
+                                    text = "বিশেষভাবে প্রচারিত",
+                                    color = Color(0xFFB45309),
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
+                        }
+                    }
                 }
                 Text(
                     text = post.timeAgo,
@@ -397,7 +639,34 @@ fun MadrasahNoticeCard(
                 }
             }
 
-            Spacer(Modifier.height(12.dp))
+            Spacer(Modifier.height(8.dp))
+
+            // Live Analytics Row (Views, Clicks, Applications)
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(Color(0xFFF4F7F5), RoundedCornerShape(8.dp))
+                    .padding(horizontal = 10.dp, vertical = 5.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = "👁 ভিউ: ${DateUtils.toBengaliDigits(post.viewsCount.toString())}  •  👆 ক্লিক: ${DateUtils.toBengaliDigits(post.clicksCount.toString())}  •  📝 আবেদন: ${DateUtils.toBengaliDigits(post.applicationsCount.toString())}",
+                    fontSize = 11.sp,
+                    color = Color(0xFF4A6358),
+                    fontWeight = FontWeight.Medium
+                )
+                if (isBoosted && activeBoost != null) {
+                    Text(
+                        text = "${DateUtils.toBengaliDigits(activeBoost.durationDays.toString())} দিনের বুস্ট",
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color(0xFFB45309)
+                    )
+                }
+            }
+
+            Spacer(Modifier.height(10.dp))
 
             // Footer Actions
             Row(
@@ -405,20 +674,45 @@ fun MadrasahNoticeCard(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Button(
-                    onClick = onApply,
-                    shape = RoundedCornerShape(20.dp),
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = if (isApplied) Color(0xFF2E7D32) else QawmiDarkGreen
-                    ),
-                    contentPadding = PaddingValues(horizontal = 20.dp, vertical = 6.dp)
-                ) {
-                    Text(
-                        text = if (isApplied) "আবেদন করা হয়েছে ✓" else "আবেদন করুন",
-                        fontSize = 13.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = Color.White
-                    )
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Button(
+                        onClick = onApply,
+                        shape = RoundedCornerShape(20.dp),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = if (isApplied) Color(0xFF2E7D32) else QawmiDarkGreen
+                        ),
+                        contentPadding = PaddingValues(horizontal = 18.dp, vertical = 6.dp)
+                    ) {
+                        Text(
+                            text = if (isApplied) "আবেদন করা হয়েছে ✓" else "আবেদন করুন",
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = Color.White
+                        )
+                    }
+
+                    if (!isBoosted) {
+                        OutlinedButton(
+                            onClick = onBoostRequest,
+                            shape = RoundedCornerShape(20.dp),
+                            border = BorderStroke(1.dp, Color(0xFFD97706)),
+                            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)
+                        ) {
+                            Icon(
+                                Icons.Default.RocketLaunch,
+                                contentDescription = null,
+                                tint = Color(0xFFB45309),
+                                modifier = Modifier.size(14.dp)
+                            )
+                            Spacer(Modifier.width(4.dp))
+                            Text(
+                                text = "Boost",
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = Color(0xFFB45309)
+                            )
+                        }
+                    }
                 }
 
                 IconButton(onClick = onBookmarkToggle) {

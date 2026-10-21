@@ -1,3 +1,4 @@
 <resources>
     <string name="app_name">কওমি কর্মসংস্থান বাংলাদেশ</string>
+    <string name="firestore_database_id">(default)</string>
 </resources>

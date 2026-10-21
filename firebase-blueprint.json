@@ -1,0 +1,144 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "User profile, role, status, notification preference, and device token metadata",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "uid": { "type": "string" },
+        "name": { "type": "string" },
+        "email": { "type": "string" },
+        "phone": { "type": "string" },
+        "status": { "type": "string" },
+        "role": { "type": "string" },
+        "joinedDate": { "type": "string" },
+        "notificationsEnabled": { "type": "boolean" },
+        "fcmToken": { "type": "string" },
+        "deviceId": { "type": "string" },
+        "updatedAt": { "type": "number" }
+      },
+      "required": ["id", "name", "email", "status", "role"]
+    },
+    "Madrasah": {
+      "title": "Madrasah",
+      "description": "Registered Qawmi Madrasah directory and verification status",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "location": { "type": "string" },
+        "muhtamim": { "type": "string" },
+        "departments": { "type": "string" },
+        "phone": { "type": "string" },
+        "regNumber": { "type": "string" },
+        "verificationStatus": { "type": "string" },
+        "updatedAt": { "type": "number" }
+      },
+      "required": ["id", "name", "location", "verificationStatus"]
+    },
+    "Notice": {
+      "title": "Notice",
+      "description": "Khidmat job recruitment notice posted by Madrasah or Admin",
+      "type": "object",
+      "properties": {
+        "postId": { "type": "string" },
+        "madrasahName": { "type": "string" },
+        "roleTitle": { "type": "string" },
+        "location": { "type": "string" },
+        "qualification": { "type": "string" },
+        "salaryInfo": { "type": "string" },
+        "deadline": { "type": "string" },
+        "phone": { "type": "string" },
+        "status": { "type": "string" },
+        "isBoosted": { "type": "boolean" },
+        "authorEmail": { "type": "string" },
+        "updatedAt": { "type": "number" }
+      },
+      "required": ["postId", "madrasahName", "roleTitle", "location", "status"]
+    },
+    "Application": {
+      "title": "Application",
+      "description": "Khidmat candidate application post or job submission",
+      "type": "object",
+      "properties": {
+        "postId": { "type": "string" },
+        "candidateName": { "type": "string" },
+        "roleTitle": { "type": "string" },
+        "location": { "type": "string" },
+        "qualification": { "type": "string" },
+        "experience": { "type": "string" },
+        "preferredDistricts": { "type": "string" },
+        "phone": { "type": "string" },
+        "status": { "type": "string" },
+        "submittedDate": { "type": "string" },
+        "applicantEmail": { "type": "string" },
+        "customFieldsJson": { "type": "string" },
+        "updatedAt": { "type": "number" }
+      },
+      "required": ["postId", "candidateName", "roleTitle", "status"]
+    },
+    "BoostRequest": {
+      "title": "BoostRequest",
+      "description": "Notice boost request with duration and automatic expiry tracking",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "noticeId": { "type": "string" },
+        "title": { "type": "string" },
+        "requestedBy": { "type": "string" },
+        "status": { "type": "string" },
+        "requestDate": { "type": "string" },
+        "durationDays": { "type": "number" },
+        "expiresAtMillis": { "type": "number" },
+        "updatedAt": { "type": "number" }
+      },
+      "required": ["id", "noticeId", "title", "status"]
+    },
+    "NotificationItem": {
+      "title": "NotificationItem",
+      "description": "Push and in-app notification record with target audience, deep-link route, and deduplication key",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "title": { "type": "string" },
+        "body": { "type": "string" },
+        "targetAudience": { "type": "string" },
+        "targetRoute": { "type": "string" },
+        "targetItemId": { "type": "string" },
+        "eventKey": { "type": "string" },
+        "sentTime": { "type": "string" },
+        "status": { "type": "string" },
+        "senderEmail": { "type": "string" },
+        "createdAtMillis": { "type": "number" }
+      },
+      "required": ["id", "title", "body", "targetAudience", "status"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": { "$ref": "#/entities/User" },
+      "description": "User accounts and notification preferences"
+    },
+    "/madrasahs/{madrasahId}": {
+      "schema": { "$ref": "#/entities/Madrasah" },
+      "description": "Madrasah directory and verification records"
+    },
+    "/notices/{postId}": {
+      "schema": { "$ref": "#/entities/Notice" },
+      "description": "Khidmat job recruitment notices"
+    },
+    "/applications/{postId}": {
+      "schema": { "$ref": "#/entities/Application" },
+      "description": "Candidate applications and status tracking"
+    },
+    "/boost_requests/{boostId}": {
+      "schema": { "$ref": "#/entities/BoostRequest" },
+      "description": "Boost requests and expiry metadata"
+    },
+    "/notifications/{notifId}": {
+      "schema": { "$ref": "#/entities/NotificationItem" },
+      "description": "Broadcast and event notifications"
+    }
+  }
+}
