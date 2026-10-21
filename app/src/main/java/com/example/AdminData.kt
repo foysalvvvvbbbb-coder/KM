@@ -789,9 +789,23 @@ object AdminRepository {
         )
         FeedRepository.addPost(feedItem)
         syncWithFeedRepository()
-        applicationsList.value.find { it.postId == newId }?.let {
-            FirebaseSyncManager.saveApplication(it, preferredDistricts = preferredDistricts.trim())
+
+        val appItem = ApplicationStatusItem(
+            postId = newId,
+            candidateName = candidateName.trim(),
+            roleTitle = roleTitle.trim(),
+            location = location.trim(),
+            qualification = qualification.trim(),
+            experience = experience.trim(),
+            phone = phone.trim(),
+            status = "অনুমোদিত",
+            submittedDate = "এইমাত্র"
+        )
+        if (applicationsList.value.none { it.postId == newId }) {
+            applicationsList.value = listOf(appItem) + applicationsList.value
         }
+        FirebaseSyncManager.saveApplication(appItem, preferredDistricts = preferredDistricts.trim())
+
         triggerEventNotification(
             title = "নতুন খেদমতপ্রার্থীর আবেদন: ${roleTitle.trim()}",
             body = "${candidateName.trim()} (${qualification.trim()}) খেদমতের জন্য আবেদন জমা দিয়েছেন।",

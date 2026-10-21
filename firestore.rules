@@ -78,10 +78,10 @@ service cloud.firestore {
     //    Status approval/rejection controlled by Admins.
     match /applications/{postId} {
       allow read: if isSignedIn();
-      allow create: if isSignedIn() &&
+      allow create, update: if isSignedIn() &&
         request.resource.data.candidateName is string &&
         request.resource.data.roleTitle is string;
-      allow update, delete: if isAllowlistedAdmin();
+      allow delete: if isAllowlistedAdmin();
     }
 
     // 5. Boost Requests Collection: Users can submit boost requests (Pending);
