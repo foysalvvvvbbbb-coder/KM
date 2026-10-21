@@ -26,6 +26,7 @@ import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -45,12 +46,16 @@ fun HomeScreen(
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
+    val isDark by AppSettingsManager.isDarkMode.collectAsState()
+    val lang by AppSettingsManager.currentLanguage.collectAsState()
 
     var showPostCandidateDialog by remember { mutableStateOf(false) }
     var showPostNoticeDialog by remember { mutableStateOf(false) }
     var showFullPrayerTimesDialog by remember { mutableStateOf(false) }
     var showVerifiedMadrasahDialog by remember { mutableStateOf(false) }
     var showNotificationsDialog by remember { mutableStateOf(false) }
+
+    val pageBg = if (isDark) Color(0xFF071E17) else Color(0xFFF3F6F3)
 
     Scaffold(
         topBar = {
@@ -59,7 +64,7 @@ fun HomeScreen(
                 onNotificationClick = { showNotificationsDialog = true }
             )
         },
-        containerColor = Color(0xFFF3F6F3)
+        containerColor = pageBg
     ) { paddingValues ->
         Column(
             modifier = Modifier
@@ -153,8 +158,13 @@ fun HomeTopBar(
 ) {
     val sentNotifs by AdminRepository.sentNotifications.collectAsState()
     val readIds by NotificationHelper.readNotificationIdsFlow.collectAsState()
+    val lang by AppSettingsManager.currentLanguage.collectAsState()
+
     val unreadCount = remember(sentNotifs, readIds) {
-        sentNotifs.count { !readIds.contains(it.id) }
+        NotificationHelper.getUnreadNotificationCount(sentNotifs, readIds)
+    }
+    val badgeText = remember(unreadCount, lang) {
+        NotificationHelper.getBadgeText(unreadCount)
     }
 
     TopAppBar(
@@ -165,44 +175,57 @@ fun HomeTopBar(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
-                    text = "۞  কওমি কর্মসংস্থান  ۞",
+                    text = AppSettingsManager.tr(
+                        "কওমি কর্মসংস্থান বাংলাদেশ",
+                        "Qawmi Employment BD"
+                    ),
                     color = Color.White,
-                    fontSize = 18.sp,
+                    fontSize = 17.sp,
                     fontWeight = FontWeight.Bold
                 )
             }
         },
         navigationIcon = {
-            IconButton(onClick = onOpenDrawer) {
+            IconButton(
+                onClick = onOpenDrawer,
+                modifier = Modifier.testTag("hamburger_menu_button")
+            ) {
                 Icon(
                     imageVector = Icons.Default.Menu,
-                    contentDescription = "মেনু",
+                    contentDescription = AppSettingsManager.tr("মেনু", "Menu"),
                     tint = Color.White
                 )
             }
         },
         actions = {
+            // ONLY place in the entire app where Notification Badge appears: Top-right Bell Icon
             Box(modifier = Modifier.padding(end = 6.dp)) {
-                IconButton(onClick = onNotificationClick) {
+                IconButton(
+                    onClick = onNotificationClick,
+                    modifier = Modifier.testTag("notification_bell_button")
+                ) {
                     Icon(
                         imageVector = Icons.Default.Notifications,
-                        contentDescription = "বিজ্ঞপ্তি",
+                        contentDescription = AppSettingsManager.tr("নোটিফিকেশন", "Notifications"),
                         tint = Color.White
                     )
                 }
-                if (unreadCount > 0) {
+                if (badgeText != null) {
                     Box(
                         modifier = Modifier
-                            .size(16.dp)
+                            .defaultMinSize(minWidth = 18.dp, minHeight = 18.dp)
                             .background(Color(0xFFE53935), CircleShape)
+                            .border(1.5.dp, QawmiDarkGreen, CircleShape)
                             .align(Alignment.TopEnd)
-                            .offset(x = (-6).dp, y = 6.dp),
+                            .offset(x = (-4).dp, y = 5.dp)
+                            .padding(horizontal = 4.dp)
+                            .testTag("notification_bell_badge"),
                         contentAlignment = Alignment.Center
                     ) {
                         Text(
-                            text = DateUtils.toBengaliDigits(unreadCount.coerceAtMost(9).toString()),
+                            text = badgeText,
                             color = Color.White,
-                            fontSize = 9.sp,
+                            fontSize = 9.5.sp,
                             fontWeight = FontWeight.Bold
                         )
                     }
@@ -274,6 +297,7 @@ fun ActionCardsGrid(
     onViewVerified: () -> Unit,
     onViewMadrasahs: () -> Unit
 ) {
+    val lang by AppSettingsManager.currentLanguage.collectAsState()
     Column(
         modifier = Modifier.fillMaxWidth(),
         verticalArrangement = Arrangement.spacedBy(10.dp)
@@ -286,15 +310,15 @@ fun ActionCardsGrid(
             ActionCardItem(
                 modifier = Modifier.weight(1f),
                 icon = Icons.Default.EditNote,
-                title = "আবেদন প্রকাশ করুন",
-                subtitle = "নিজের যোগ্যতা ও অভিজ্ঞতা নিয়ে আবেদন করুন",
+                title = AppSettingsManager.tr("আবেদন প্রকাশ করুন", "Post Application"),
+                subtitle = AppSettingsManager.tr("নিজের যোগ্যতা ও অভিজ্ঞতা নিয়ে আবেদন করুন", "Share your qualifications & experience"),
                 onClick = onPostCandidate
             )
             ActionCardItem(
                 modifier = Modifier.weight(1f),
                 icon = Icons.Default.Campaign,
-                title = "বিজ্ঞপ্তি দিন",
-                subtitle = "মাদ্রাসার নিয়োগ বিজ্ঞপ্তি প্রকাশ করুন",
+                title = AppSettingsManager.tr("বিজ্ঞপ্তি দিন", "Post Job Notice"),
+                subtitle = AppSettingsManager.tr("মাদ্রাসার নিয়োগ বিজ্ঞপ্তি প্রকাশ করুন", "Publish madrasah recruitment notices"),
                 onClick = onPostNotice
             )
         }
@@ -307,15 +331,15 @@ fun ActionCardsGrid(
             ActionCardItem(
                 modifier = Modifier.weight(1f),
                 icon = Icons.Default.Groups,
-                title = "অন্যদের আবেদন দেখুন",
-                subtitle = "অন্যান্য প্রার্থীদের আবেদন ও প্রোফাইল দেখুন",
+                title = AppSettingsManager.tr("অন্যদের আবেদন দেখুন", "Browse Candidates"),
+                subtitle = AppSettingsManager.tr("অন্যান্য প্রার্থীদের আবেদন ও প্রোফাইল দেখুন", "View candidate profiles & applications"),
                 onClick = onViewCandidates
             )
             ActionCardItem(
                 modifier = Modifier.weight(1f),
                 icon = Icons.Default.Person,
-                title = "আমার প্রোফাইল",
-                subtitle = "নিজের তথ্য, যোগ্যতা ও অভিজ্ঞতা আপডেট করুন",
+                title = AppSettingsManager.tr("আমার প্রোফাইল", "My Profile"),
+                subtitle = AppSettingsManager.tr("নিজের তথ্য, যোগ্যতা ও অভিজ্ঞতা আপডেট করুন", "Manage your profile, applications & posts"),
                 onClick = onViewProfile
             )
         }
@@ -328,15 +352,15 @@ fun ActionCardsGrid(
             ActionCardItem(
                 modifier = Modifier.weight(1f),
                 icon = Icons.Default.Bookmark,
-                title = "পছন্দের খেদমত",
-                subtitle = "পছন্দের চাকরি সংরক্ষণ করে পরে আবেদন করুন",
+                title = AppSettingsManager.tr("পছন্দের খেদমত", "Saved Posts"),
+                subtitle = AppSettingsManager.tr("পছন্দের চাকরি সংরক্ষণ করে পরে আবেদন করুন", "Bookmark posts to apply later"),
                 onClick = onViewBookmarks
             )
             ActionCardItem(
                 modifier = Modifier.weight(1f),
                 icon = Icons.Default.VerifiedUser,
-                title = "যাচাইকৃত মাদ্রাসা",
-                subtitle = "যাচাইকৃত মাদ্রাসাগুলো আলাদাভাবে দেখুন",
+                title = AppSettingsManager.tr("যাচাইকৃত মাদ্রাসা", "Verified Madrasahs"),
+                subtitle = AppSettingsManager.tr("যাচাইকৃত মাদ্রাসাগুলো আলাদাভাবে দেখুন", "Browse verified madrasah institutions"),
                 onClick = onViewVerified
             )
         }
@@ -344,8 +368,8 @@ fun ActionCardsGrid(
         // Row 4 (Full Width): মাদ্রাসা
         ActionCardFullWidth(
             icon = Icons.Default.AccountBalance,
-            title = "মাদ্রাসা",
-            subtitle = "মাদ্রাসার তথ্য, অবস্থান ও বিশেষ সুবিধা দেখুন",
+            title = AppSettingsManager.tr("মাদ্রাসা", "Madrasah Directory"),
+            subtitle = AppSettingsManager.tr("মাদ্রাসার তথ্য, অবস্থান ও বিশেষ সুবিধা দেখুন", "Explore madrasah details, locations & facilities"),
             onClick = onViewMadrasahs
         )
     }
@@ -359,13 +383,19 @@ fun ActionCardItem(
     subtitle: String,
     onClick: () -> Unit
 ) {
+    val isDark by AppSettingsManager.isDarkMode.collectAsState()
+    val cardBg = if (isDark) Color(0xFF0E2E24) else Color.White
+    val borderColor = if (isDark) Color(0xFF1F4E3F) else Color(0xFFE2EBE5)
+    val titleColor = if (isDark) Color(0xFFE8F5EF) else QawmiDarkGreen
+    val subColor = if (isDark) Color(0xFF9BC4B5) else Color(0xFF5A786E)
+
     Card(
         modifier = modifier
             .shadow(1.5.dp, RoundedCornerShape(14.dp))
             .clickable(onClick = onClick),
         shape = RoundedCornerShape(14.dp),
-        colors = CardDefaults.cardColors(containerColor = Color.White),
-        border = BorderStroke(0.8.dp, Color(0xFFE2EBE5))
+        colors = CardDefaults.cardColors(containerColor = cardBg),
+        border = BorderStroke(0.8.dp, borderColor)
     ) {
         Column(
             modifier = Modifier
@@ -406,13 +436,13 @@ fun ActionCardItem(
                 text = title,
                 fontSize = 14.sp,
                 fontWeight = FontWeight.Bold,
-                color = QawmiDarkGreen
+                color = titleColor
             )
             Spacer(Modifier.height(2.dp))
             Text(
                 text = subtitle,
                 fontSize = 11.sp,
-                color = Color(0xFF5A786E),
+                color = subColor,
                 lineHeight = 15.sp,
                 maxLines = 2
             )
@@ -427,14 +457,20 @@ fun ActionCardFullWidth(
     subtitle: String,
     onClick: () -> Unit
 ) {
+    val isDark by AppSettingsManager.isDarkMode.collectAsState()
+    val cardBg = if (isDark) Color(0xFF0E2E24) else Color.White
+    val borderColor = if (isDark) Color(0xFF1F4E3F) else Color(0xFFE2EBE5)
+    val titleColor = if (isDark) Color(0xFFE8F5EF) else QawmiDarkGreen
+    val subColor = if (isDark) Color(0xFF9BC4B5) else Color(0xFF5A786E)
+
     Card(
         modifier = Modifier
             .fillMaxWidth()
             .shadow(1.5.dp, RoundedCornerShape(14.dp))
             .clickable(onClick = onClick),
         shape = RoundedCornerShape(14.dp),
-        colors = CardDefaults.cardColors(containerColor = Color.White),
-        border = BorderStroke(0.8.dp, Color(0xFFE2EBE5))
+        colors = CardDefaults.cardColors(containerColor = cardBg),
+        border = BorderStroke(0.8.dp, borderColor)
     ) {
         Row(
             modifier = Modifier
@@ -464,13 +500,13 @@ fun ActionCardFullWidth(
                     text = title,
                     fontSize = 14.sp,
                     fontWeight = FontWeight.Bold,
-                    color = QawmiDarkGreen
+                    color = titleColor
                 )
                 Spacer(Modifier.height(2.dp))
                 Text(
                     text = subtitle,
                     fontSize = 11.sp,
-                    color = Color(0xFF5A786E),
+                    color = subColor,
                     lineHeight = 15.sp
                 )
             }
@@ -1358,16 +1394,20 @@ fun NotificationsDialog(onDismiss: () -> Unit) {
     var selectedCategory by remember { mutableStateOf("সব") }
     var showPrefsPanel by remember { mutableStateOf(false) }
 
-    val filteredNotifications = remember(adminNotifications, selectedCategory) {
+    val uniqueAdminNotifications = remember(adminNotifications) {
+        adminNotifications.filter { it.id.isNotBlank() }.distinctBy { it.id }
+    }
+
+    val filteredNotifications = remember(uniqueAdminNotifications, selectedCategory) {
         if (selectedCategory == "সব") {
-            adminNotifications
+            uniqueAdminNotifications
         } else {
-            adminNotifications.filter { it.category.equals(selectedCategory, ignoreCase = true) }
+            uniqueAdminNotifications.filter { it.category.equals(selectedCategory, ignoreCase = true) }
         }
     }
 
-    val unreadCount = remember(adminNotifications, readIds) {
-        adminNotifications.count { !readIds.contains(it.id) }
+    val unreadCount = remember(uniqueAdminNotifications, readIds) {
+        NotificationHelper.getUnreadNotificationCount(uniqueAdminNotifications, readIds)
     }
 
     Dialog(onDismissRequest = onDismiss) {

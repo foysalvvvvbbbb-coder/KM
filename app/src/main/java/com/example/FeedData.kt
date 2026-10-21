@@ -141,16 +141,32 @@ object FeedRepository {
         return isNowBookmarked
     }
 
-    fun isApplied(postId: String): Boolean = appliedIds.contains(postId)
+    fun isApplied(postId: String): Boolean =
+        appliedIds.contains(postId) || ProfileAndInboxRepository.hasAppliedToPost(postId)
 
-    fun applyToPost(context: Context, postId: String) {
+    fun applyToPost(
+        context: Context,
+        postId: String,
+        candidateName: String = "",
+        candidatePhone: String = "",
+        candidateQual: String = ""
+    ) {
         val isFirstTime = appliedIds.add(postId)
         val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
         prefs.edit().putStringSet(APPLIED_KEY, appliedIds.toSet()).apply()
 
+        val targetPost = posts.find { it.id == postId }
+        if (targetPost != null) {
+            ProfileAndInboxRepository.submitPostApplication(
+                post = targetPost,
+                candidateName = candidateName,
+                candidatePhone = candidatePhone,
+                candidateQual = candidateQual
+            )
+        }
+
         if (isFirstTime) {
             AdminRepository.recordNoticeInteraction(postId, "apply")
-            val targetPost = posts.find { it.id == postId }
             if (targetPost != null) {
                 AdminRepository.recordAuditLog(
                     actorEmail = "আবেদনকারী",
@@ -161,7 +177,7 @@ object FeedRepository {
                     title = "আবেদন সফলভাবে গৃহীত হয়েছে",
                     body = "${targetPost.title}-এর '${targetPost.role}' পদে আপনার আবেদন জমা হয়েছে।",
                     targetAudience = "খেদমতপ্রার্থী",
-                    targetRoute = "abedon",
+                    targetRoute = "my_applications",
                     targetItemId = postId,
                     eventKey = "apply_post_$postId",
                     category = "Applications"

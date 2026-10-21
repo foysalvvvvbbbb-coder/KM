@@ -697,4 +697,128 @@ class ExampleRobolectricTest {
         NotificationHelper.consumeDeepLink()
         assertEquals(null, NotificationHelper.pendingDeepLinkRoute.value)
     }
+
+    @Test
+    fun testProfileApplicationInboxAndPresenceSystem() {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        AdminRepository.init(context)
+        FeedRepository.init(context)
+        ProfileAndInboxRepository.init(context)
+
+        // 1. Professional User Profile update, photo upload/remove, and completion calculation
+        val initialProfile = ProfileAndInboxRepository.currentUserProfile.value
+        assertTrue(initialProfile.fullName.isNotBlank())
+        assertTrue(initialProfile.completionPercentage() >= 70)
+
+        val updated = initialProfile.copy(
+            fullName = "হাফেজ মাওলানা মাহমুদ হাসান",
+            bio = "দাওরায়ে হাদিস ও ইফতা সম্পন্ন, হাদিস ও ফিকহ বিভাগে অভিজ্ঞ শিক্ষক",
+            district = "ঢাকা",
+            location = "মোহাম্মদপুর, ঢাকা",
+            teachingSubjects = "বুখারী শরীফ, তিরমিযী শরীফ, ফিকহ",
+            photoUri = "content://sample/avatar.jpg"
+        )
+        ProfileAndInboxRepository.updateProfile(updated)
+        assertEquals("হাফেজ মাওলানা মাহমুদ হাসান", ProfileAndInboxRepository.currentUserProfile.value.fullName)
+        assertEquals("মোহাম্মদপুর, ঢাকা", ProfileAndInboxRepository.currentUserProfile.value.location)
+        assertEquals("content://sample/avatar.jpg", ProfileAndInboxRepository.currentUserProfile.value.photoUri)
+
+        ProfileAndInboxRepository.updateProfile(updated.copy(photoUri = "", avatarPreset = "no_photo"))
+        assertEquals("", ProfileAndInboxRepository.currentUserProfile.value.photoUri)
+
+        // 2. Application History: duplicate check & withdraw only when পেন্ডিং
+        val testNotice = FeedItem(
+            id = "test_post_999",
+            type = FeedItemType.MADRASAH_NOTICE,
+            title = "জামিয়া রাহমানিয়া ঢাকা",
+            location = "মোহাম্মদপুর, ঢাকা",
+            role = "মুহাদ্দিস আবশ্যক",
+            qualification = "দাওরায়ে হাদীস ও ইফতা",
+            extraInfo = "১৮,০০০ টাকা",
+            secondaryInfo = "৩০ নভেম্বর, ২০২৫",
+            timeAgo = "১০ মিনিট আগে",
+            contactPhone = "01711000000"
+        )
+        val firstApply = ProfileAndInboxRepository.submitPostApplication(testNotice)
+        assertTrue(firstApply)
+        val duplicateApply = ProfileAndInboxRepository.submitPostApplication(testNotice)
+        org.junit.Assert.assertFalse(duplicateApply)
+
+        val appRecord = ProfileAndInboxRepository.userApplications.value.first { it.postId == "test_post_999" }
+        assertEquals("পেন্ডিং", appRecord.status)
+
+        // Withdraw while পেন্ডিং succeeds
+        val cancelled = ProfileAndInboxRepository.withdrawApplication(appRecord.id)
+        assertTrue(cancelled)
+        org.junit.Assert.assertFalse(ProfileAndInboxRepository.hasAppliedToPost("test_post_999"))
+
+        // 3. Text-Only Inbox (No fake/demo conversations; real conversation created on demand)
+        val conv = ProfileAndInboxRepository.getOrCreateConversationWith(
+            participantId = "user_abdul_karim",
+            participantName = "আবদুল করিম",
+            participantRole = "মাদরাসা শিক্ষক",
+            participantPhone = "01811223344",
+            participantMadrasah = "আল-জামিয়া ইসলামিয়া, চট্টগ্রাম"
+        )
+        val emptyRes = ProfileAndInboxRepository.sendTextOnlyMessage(conv.id, "   ")
+        org.junit.Assert.assertFalse(emptyRes.success)
+        assertEquals("খালি মেসেজ পাঠানো যাবে না। অনুগ্রহ করে টেক্সট লিখুন।", emptyRes.errorMessage)
+
+        val mediaRes = ProfileAndInboxRepository.sendTextOnlyMessage(conv.id, "content://media/external/images/123")
+        org.junit.Assert.assertFalse(mediaRes.success)
+        assertEquals("শুধুমাত্র টেক্সট মেসেজ অনুমোদিত। ছবি, ভিডিও, অডিও বা ফাইল পাঠানো সম্পূর্ণ নিষিদ্ধ।", mediaRes.errorMessage)
+
+        val validSendRes = ProfileAndInboxRepository.sendTextOnlyMessage(conv.id, "আসসালামু আলাইকুম, আমি সাক্ষাৎকারের জন্য প্রস্তুত।")
+        assertTrue(validSendRes.success)
+        val messages = ProfileAndInboxRepository.messagesByConversation.value[conv.id].orEmpty()
+        assertTrue(messages.any { it.text == "আসসালামু আলাইকুম, আমি সাক্ষাৎকারের জন্য প্রস্তুত।" })
+
+        // Mark conversation as read resets unreadCount to 0
+        ProfileAndInboxRepository.markConversationAsRead(conv.id)
+        val readConv = ProfileAndInboxRepository.conversations.value.first { it.id == conv.id }
+        assertEquals(0, readConv.unreadCount)
+
+        // 4. Own Profile vs Other User Profile Identity Check
+        val ownUid = ProfileAndInboxRepository.currentUserProfile.value.uid
+        assertTrue(ProfileAndInboxRepository.isOwnProfile(ownUid))
+        assertTrue(ProfileAndInboxRepository.isOwnProfile("me"))
+        org.junit.Assert.assertFalse(ProfileAndInboxRepository.isOwnProfile("user_abdul_karim"))
+
+        // 5. Notification Bell Badge Rules (0 -> null, 1 -> ১, 5 -> ৫, deduplication, mark all read -> null)
+        AppSettingsManager.init(context)
+        AppSettingsManager.setLanguage(context, "bn")
+        assertEquals(null, NotificationHelper.getBadgeText(0))
+        assertEquals("১", NotificationHelper.getBadgeText(1))
+        assertEquals("৫", NotificationHelper.getBadgeText(5))
+
+        val sampleNotifs = listOf(
+            SentNotificationItem(id = "n1", title = "T1", body = "B1", targetAudience = "All", sentTime = "Now", status = "Sent"),
+            SentNotificationItem(id = "n1", title = "T1 Dup", body = "B1", targetAudience = "All", sentTime = "Now", status = "Sent"),
+            SentNotificationItem(id = "n2", title = "T2", body = "B2", targetAudience = "All", sentTime = "Now", status = "Sent")
+        )
+        assertEquals(2, NotificationHelper.getUnreadNotificationCount(sampleNotifs, emptySet()))
+        assertEquals(1, NotificationHelper.getUnreadNotificationCount(sampleNotifs, setOf("n1")))
+        assertEquals(0, NotificationHelper.getUnreadNotificationCount(sampleNotifs, setOf("n1", "n2")))
+        assertEquals(null, NotificationHelper.getBadgeText(NotificationHelper.getUnreadNotificationCount(sampleNotifs, setOf("n1", "n2"))))
+
+        // 6. Global Dark Mode & Language Selection Persistence
+        AppSettingsManager.setDarkMode(context, true)
+        assertTrue(AppSettingsManager.isDarkMode.value)
+        AppSettingsManager.setLanguage(context, "en")
+        assertEquals("en", AppSettingsManager.currentLanguage.value)
+        assertEquals("My Profile", AppSettingsManager.tr("আমার প্রোফাইল", "My Profile"))
+        assertEquals("5", NotificationHelper.getBadgeText(5))
+        AppSettingsManager.setLanguage(context, "bn")
+        AppSettingsManager.setDarkMode(context, false)
+
+        // 7. Online/Offline Presence & Privacy Settings
+        ProfileAndInboxRepository.setOnlinePresence(isOnline = false, showOnlineStatus = true)
+        org.junit.Assert.assertFalse(ProfileAndInboxRepository.currentUserProfile.value.isOnline)
+        ProfileAndInboxRepository.setOnlinePresence(isOnline = true, showOnlineStatus = false)
+        val privProfile = ProfileAndInboxRepository.currentUserProfile.value
+        org.junit.Assert.assertFalse(privProfile.getEffectiveOnlineState(viewerIsSelf = false))
+        assertEquals("স্ট্যাটাস গোপন রাখা হয়েছে", privProfile.getFormattedLastSeen(viewerIsSelf = false))
+    }
 }
+
+

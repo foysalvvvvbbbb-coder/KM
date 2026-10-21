@@ -113,12 +113,80 @@
         "createdAtMillis": { "type": "number" }
       },
       "required": ["id", "title", "body", "targetAudience", "status"]
+    },
+    "UserPresence": {
+      "title": "UserPresence",
+      "description": "Real-time user online/offline status and privacy preferences",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "isOnline": { "type": "boolean" },
+        "lastActiveTimestamp": { "type": "number" },
+        "showOnlineStatus": { "type": "boolean" },
+        "showLastSeen": { "type": "boolean" },
+        "allowInboxMessages": { "type": "boolean" }
+      },
+      "required": ["uid", "isOnline"]
+    },
+    "UserApplication": {
+      "title": "UserApplication",
+      "description": "Job application record submitted by a user",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "postId": { "type": "string" },
+        "applicantUid": { "type": "string" },
+        "applicantName": { "type": "string" },
+        "roleTitle": { "type": "string" },
+        "madrasahName": { "type": "string" },
+        "location": { "type": "string" },
+        "salary": { "type": "string" },
+        "appliedDate": { "type": "string" },
+        "status": { "type": "string" },
+        "rejectionReason": { "type": "string" }
+      },
+      "required": ["id", "postId", "roleTitle", "status"]
+    },
+    "Conversation": {
+      "title": "Conversation",
+      "description": "Text-only direct messaging conversation thread",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "otherUserId": { "type": "string" },
+        "otherUserName": { "type": "string" },
+        "otherUserTitle": { "type": "string" },
+        "lastMessage": { "type": "string" },
+        "lastMessageTime": { "type": "string" },
+        "lastMessageTimestamp": { "type": "number" },
+        "unreadCount": { "type": "number" },
+        "isOtherUserOnline": { "type": "boolean" },
+        "isBlocked": { "type": "boolean" }
+      },
+      "required": ["id", "otherUserName", "lastMessage"]
+    },
+    "ChatMessage": {
+      "title": "ChatMessage",
+      "description": "Strictly text-only chat message (no images, audio, video, or files)",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "conversationId": { "type": "string" },
+        "senderUid": { "type": "string" },
+        "senderName": { "type": "string" },
+        "receiverUid": { "type": "string" },
+        "text": { "type": "string" },
+        "timestamp": { "type": "number" },
+        "formattedTime": { "type": "string" },
+        "isSeen": { "type": "boolean" }
+      },
+      "required": ["id", "conversationId", "senderUid", "text"]
     }
   },
   "firestore": {
     "/users/{userId}": {
       "schema": { "$ref": "#/entities/User" },
-      "description": "User accounts and notification preferences"
+      "description": "User accounts, professional profiles, and notification preferences"
     },
     "/madrasahs/{madrasahId}": {
       "schema": { "$ref": "#/entities/Madrasah" },
@@ -139,6 +207,23 @@
     "/notifications/{notifId}": {
       "schema": { "$ref": "#/entities/NotificationItem" },
       "description": "Broadcast and event notifications"
+    },
+    "/user_presence/{userId}": {
+      "schema": { "$ref": "#/entities/UserPresence" },
+      "description": "Real-time user online/offline status and privacy settings"
+    },
+    "/user_applications/{appId}": {
+      "schema": { "$ref": "#/entities/UserApplication" },
+      "description": "User submitted job application history records"
+    },
+    "/conversations/{conversationId}": {
+      "schema": { "$ref": "#/entities/Conversation" },
+      "description": "Text-only direct messaging conversations"
+    },
+    "/conversations/{conversationId}/messages/{messageId}": {
+      "schema": { "$ref": "#/entities/ChatMessage" },
+      "description": "Text-only messages inside a conversation"
     }
   }
 }
+

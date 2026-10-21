@@ -159,6 +159,29 @@ object NotificationHelper {
         return readNotificationIdsFlow.value.contains(notifId)
     }
 
+    /**
+     * Computes the exact unread notification count from real Firebase/AdminRepository notifications,
+     * deduplicating by notification ID and excluding read IDs. Never returns hardcoded or duplicate counts.
+     */
+    fun getUnreadNotificationCount(
+        notifications: List<SentNotificationItem> = AdminRepository.sentNotifications.value,
+        readIds: Set<String> = readNotificationIdsFlow.value
+    ): Int {
+        return notifications
+            .filter { it.id.isNotBlank() }
+            .distinctBy { it.id }
+            .count { !readIds.contains(it.id) }
+    }
+
+    /**
+     * Returns null when unreadCount <= 0 (so no badge/dot/0 is shown),
+     * or the formatted count string ("১", "৫", etc.) when unreadCount > 0.
+     */
+    fun getBadgeText(unreadCount: Int): String? {
+        if (unreadCount <= 0) return null
+        return AppSettingsManager.formatNumber(unreadCount)
+    }
+
     fun markAsRead(context: Context, notifId: String) {
         if (notifId.isBlank()) return
         val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)

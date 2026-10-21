@@ -53,10 +53,13 @@ object FirebaseSyncManager {
     fun init(context: Context) {
         appContext = context.applicationContext
         NotificationHelper.init(context)
+        ProfileAndInboxRepository.init(context)
 
         try {
             val auth = FirebaseAuth.getInstance()
             if (auth.currentUser != null) {
+                ProfileAndInboxRepository.syncAuthIdentityToProfile(context)
+                ProfileAndInboxRepository.setOnlinePresence(true)
                 startRealtimeSync()
                 syncAuthenticatedUserRecord()
             } else {
@@ -70,9 +73,12 @@ object FirebaseSyncManager {
     fun onAuthStateChanged() {
         val user = try { FirebaseAuth.getInstance().currentUser } catch (_: Exception) { null }
         if (user != null) {
+            ProfileAndInboxRepository.syncAuthIdentityToProfile(appContext)
+            ProfileAndInboxRepository.setOnlinePresence(true)
             startRealtimeSync()
             syncAuthenticatedUserRecord()
         } else {
+            ProfileAndInboxRepository.setOnlinePresence(false)
             stopRealtimeSync()
             lastSyncStatus.value = "লগআউট অবস্থা (লোকাল ক্যাশ)"
         }
@@ -886,6 +892,155 @@ object FirebaseSyncManager {
             .set(payload)
             .addOnFailureListener { e ->
                 handleFirestoreError(e, FirestoreOpType.CREATE, "telegram_logs/${entry.id}")
+            }
+    }
+
+    fun saveFullUserProfile(profile: UserProfileData, onComplete: (Boolean, String?) -> Unit = { _, _ -> }) {
+        val db = getDb() ?: run { onComplete(true, null); return }
+        val docId = try { FirebaseAuth.getInstance().currentUser?.uid } catch (_: Exception) { null } ?: profile.uid
+        val payload = mapOf(
+            "id" to docId,
+            "uid" to docId,
+            "name" to profile.fullName,
+            "fullName" to profile.fullName,
+            "email" to profile.email,
+            "phone" to profile.phone,
+            "location" to profile.location,
+            "district" to profile.district,
+            "division" to profile.division,
+            "bio" to profile.bio,
+            "madrasahName" to profile.madrasahName,
+            "qualification" to profile.qualification,
+            "teachingSubjects" to profile.teachingSubjects,
+            "skills" to profile.skills,
+            "experience" to profile.experience,
+            "preferredKhedmotType" to profile.preferredKhedmotType,
+            "roleLabel" to profile.roleLabel,
+            "designation" to profile.designation,
+            "photoUri" to profile.photoUri,
+            "avatarPreset" to profile.avatarPreset,
+            "isVerified" to profile.isVerified,
+            "isOnline" to profile.isOnline,
+            "lastActiveMillis" to profile.lastActiveMillis,
+            "showOnlineStatus" to profile.showOnlineStatus,
+            "completionPercentage" to profile.completionPercentage(),
+            "status" to "সক্রিয়",
+            "role" to if (AdminRepository.isUserAdmin(profile.email)) "Admin" else "আবেদনকারী",
+            "updatedAt" to System.currentTimeMillis()
+        )
+        db.collection("users").document(docId)
+            .set(payload, SetOptions.merge())
+            .addOnSuccessListener { onComplete(true, null) }
+            .addOnFailureListener { e ->
+                handleFirestoreError(e, FirestoreOpType.WRITE, "users/$docId")
+                onComplete(false, e.localizedMessage)
+            }
+    }
+
+    fun saveUserPresence(profile: UserProfileData) {
+        val db = getDb() ?: return
+        val docId = try { FirebaseAuth.getInstance().currentUser?.uid } catch (_: Exception) { null } ?: return
+        val payload = mapOf(
+            "isOnline" to profile.isOnline,
+            "lastActiveMillis" to profile.lastActiveMillis,
+            "showOnlineStatus" to profile.showOnlineStatus,
+            "updatedAt" to System.currentTimeMillis()
+        )
+        db.collection("users").document(docId)
+            .set(payload, SetOptions.merge())
+            .addOnFailureListener { e ->
+                handleFirestoreError(e, FirestoreOpType.UPDATE, "users/$docId")
+            }
+    }
+
+    fun saveUserApplicationRecord(record: UserApplicationRecord) {
+        val db = getDb() ?: return
+        val payload = mapOf(
+            "id" to record.id,
+            "postId" to record.postId,
+            "applicantUid" to record.applicantUid,
+            "applicantName" to record.applicantName,
+            "applicantEmail" to record.applicantEmail,
+            "applicantPhone" to record.applicantPhone,
+            "applicantQualification" to record.applicantQualification,
+            "roleTitle" to record.roleTitle,
+            "madrasahName" to record.madrasahName,
+            "location" to record.location,
+            "salaryInfo" to record.salaryInfo,
+            "deadline" to record.deadline,
+            "appliedDate" to record.appliedDate,
+            "appliedAtMillis" to record.appliedAtMillis,
+            "status" to record.status,
+            "notes" to record.notes,
+            "updatedAt" to System.currentTimeMillis()
+        )
+        db.collection("user_applications").document(record.id)
+            .set(payload, SetOptions.merge())
+            .addOnFailureListener { e ->
+                handleFirestoreError(e, FirestoreOpType.WRITE, "user_applications/${record.id}")
+            }
+    }
+
+    fun deleteUserApplicationRecord(applicationId: String) {
+        val db = getDb() ?: return
+        db.collection("user_applications").document(applicationId)
+            .delete()
+            .addOnFailureListener { e ->
+                handleFirestoreError(e, FirestoreOpType.DELETE, "user_applications/$applicationId")
+            }
+    }
+
+    fun saveConversation(conv: ChatConversation) {
+        val db = getDb() ?: return
+        val senderUid = try { FirebaseAuth.getInstance().currentUser?.uid } catch (_: Exception) { null } ?: "user_default"
+        val payload = mapOf(
+            "id" to conv.id,
+            "participantIds" to listOf(senderUid, conv.participantId),
+            "participantId" to conv.participantId,
+            "participantName" to conv.participantName,
+            "participantRole" to conv.participantRole,
+            "participantEmail" to conv.participantEmail,
+            "participantPhone" to conv.participantPhone,
+            "participantMadrasah" to conv.participantMadrasah,
+            "participantLocation" to conv.participantLocation,
+            "isOnline" to conv.isOnline,
+            "lastActiveText" to conv.lastActiveText,
+            "lastMessage" to conv.lastMessage,
+            "lastMessageTime" to conv.lastMessageTime,
+            "lastMessageAtMillis" to conv.lastMessageAtMillis,
+            "unreadCount" to conv.unreadCount,
+            "relatedPostId" to conv.relatedPostId,
+            "relatedPostTitle" to conv.relatedPostTitle,
+            "isBlocked" to conv.isBlocked,
+            "blockedByMe" to conv.blockedByMe,
+            "updatedAt" to System.currentTimeMillis()
+        )
+        db.collection("conversations").document(conv.id)
+            .set(payload, SetOptions.merge())
+            .addOnFailureListener { e ->
+                handleFirestoreError(e, FirestoreOpType.WRITE, "conversations/${conv.id}")
+            }
+    }
+
+    fun saveChatMessage(msg: ChatMessage) {
+        val db = getDb() ?: return
+        val payload = mapOf(
+            "id" to msg.id,
+            "conversationId" to msg.conversationId,
+            "senderId" to msg.senderId,
+            "senderName" to msg.senderName,
+            "receiverId" to msg.receiverId,
+            "text" to msg.text,
+            "messageType" to "TEXT_ONLY",
+            "timestampText" to msg.timestampText,
+            "createdAtMillis" to msg.createdAtMillis,
+            "isSeen" to msg.isSeen
+        )
+        db.collection("conversations").document(msg.conversationId)
+            .collection("messages").document(msg.id)
+            .set(payload)
+            .addOnFailureListener { e ->
+                handleFirestoreError(e, FirestoreOpType.CREATE, "conversations/${msg.conversationId}/messages/${msg.id}")
             }
     }
 }

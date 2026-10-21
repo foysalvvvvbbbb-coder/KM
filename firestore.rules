@@ -161,5 +161,45 @@ service cloud.firestore {
       allow read, create: if isAllowlistedAdmin();
       allow update, delete: if isSuperAdmin();
     }
+
+    // 13. Online/Offline Presence & Privacy Controls
+    match /user_presence/{userId} {
+      allow read: if isSignedIn();
+      allow create, update, delete: if isOwner(userId) || isAllowlistedAdmin();
+    }
+
+    // 14. User Job Application History Records
+    match /user_applications/{appId} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn() &&
+        request.resource.data.postId is string &&
+        request.resource.data.roleTitle is string;
+      allow update, delete: if isSignedIn() && (
+        isAllowlistedAdmin() ||
+        resource.data.applicantUid == request.auth.uid
+      );
+    }
+
+    // 15. Text-Only Inbox Conversations & Messages (No media attachments allowed)
+    match /conversations/{conversationId} {
+      allow read: if isSignedIn();
+      allow create, update: if isSignedIn() &&
+        request.resource.data.lastMessage is string &&
+        request.resource.data.lastMessage.size() <= 1000;
+      allow delete: if isAllowlistedAdmin();
+
+      match /messages/{messageId} {
+        allow read: if isSignedIn();
+        allow create: if isSignedIn() &&
+          request.resource.data.text is string &&
+          request.resource.data.text.size() > 0 &&
+          request.resource.data.text.size() <= 1000 &&
+          !('mediaUrl' in request.resource.data) &&
+          !('attachmentUrl' in request.resource.data);
+        allow update: if isSignedIn();
+        allow delete: if isAllowlistedAdmin();
+      }
+    }
   }
 }
+

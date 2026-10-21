@@ -33,8 +33,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 
-// Color palette matching the reference image exactly
-val QawmiDarkGreen = Color(0xFF093F33)
+// Color palette using shared constants from UIComponents.kt
 val QawmiCardBg = Color(0xFFFFFFFF)
 val QawmiMintPill = Color(0xFFE2F4EC)
 val QawmiMintText = Color(0xFF0C4E3F)
@@ -48,11 +47,14 @@ val QawmiTextMuted = Color(0xFF4C6B61)
 @Composable
 fun FeedScreen(
     onOpenDrawer: () -> Unit = {},
-    initialFilter: String = "সব পোস্ট"
+    initialFilter: String = "সব পোস্ট",
+    onViewPublicProfile: (String) -> Unit = {},
+    onOpenChat: (ChatConversation) -> Unit = {}
 ) {
     val context = LocalContext.current
     LaunchedEffect(Unit) {
         FeedRepository.init(context)
+        ProfileAndInboxRepository.init(context)
         AdminRepository.checkExpiredBoosts()
     }
 
@@ -74,8 +76,14 @@ fun FeedScreen(
     val boostRequests by AdminRepository.boostRequests.collectAsState()
     val sentNotifs by AdminRepository.sentNotifications.collectAsState()
     val readIds by NotificationHelper.readNotificationIdsFlow.collectAsState()
+    val isDark by AppSettingsManager.isDarkMode.collectAsState()
+    val lang by AppSettingsManager.currentLanguage.collectAsState()
+
     val unreadCount = remember(sentNotifs, readIds) {
-        sentNotifs.count { !readIds.contains(it.id) }
+        NotificationHelper.getUnreadNotificationCount(sentNotifs, readIds)
+    }
+    val badgeText = remember(unreadCount, lang) {
+        NotificationHelper.getBadgeText(unreadCount)
     }
 
     val boostedIds = remember(adminNotices, boostRequests) {
@@ -122,6 +130,8 @@ fun FeedScreen(
         filteredPosts.filter { it.type == FeedItemType.MADRASAH_NOTICE && it.id in boostedIds }
     }
 
+    val pageBg = if (isDark) Color(0xFF071E17) else Color(0xFFF3F6F3)
+
     Scaffold(
         topBar = {
             TopAppBar(
@@ -132,7 +142,7 @@ fun FeedScreen(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Text(
-                            text = "۞  ফিড  ۞",
+                            text = AppSettingsManager.tr("খেদমত বিজ্ঞপ্তি", "Job Notices & Feed"),
                             color = Color.White,
                             fontSize = 18.sp,
                             fontWeight = FontWeight.Bold
@@ -141,27 +151,37 @@ fun FeedScreen(
                 },
                 navigationIcon = {
                     IconButton(onClick = onOpenDrawer) {
-                        Icon(Icons.Default.Menu, contentDescription = "মেনু", tint = Color.White)
+                        Icon(
+                            Icons.Default.Menu,
+                            contentDescription = AppSettingsManager.tr("মেনু", "Menu"),
+                            tint = Color.White
+                        )
                     }
                 },
                 actions = {
                     Box(modifier = Modifier.padding(end = 6.dp)) {
                         IconButton(onClick = { showNotifCenter = true }) {
-                            Icon(Icons.Default.Notifications, contentDescription = "বিজ্ঞপ্তি", tint = Color.White)
+                            Icon(
+                                Icons.Default.Notifications,
+                                contentDescription = AppSettingsManager.tr("নোটিফিকেশন", "Notifications"),
+                                tint = Color.White
+                            )
                         }
-                        if (unreadCount > 0) {
+                        if (badgeText != null) {
                             Box(
                                 modifier = Modifier
-                                    .size(16.dp)
+                                    .defaultMinSize(minWidth = 18.dp, minHeight = 18.dp)
                                     .background(Color(0xFFE53935), CircleShape)
+                                    .border(1.5.dp, QawmiDarkGreen, CircleShape)
                                     .align(Alignment.TopEnd)
-                                    .offset(x = (-6).dp, y = 6.dp),
+                                    .offset(x = (-4).dp, y = 5.dp)
+                                    .padding(horizontal = 4.dp),
                                 contentAlignment = Alignment.Center
                             ) {
                                 Text(
-                                    text = DateUtils.toBengaliDigits(unreadCount.coerceAtMost(9).toString()),
+                                    text = badgeText,
                                     color = Color.White,
-                                    fontSize = 9.sp,
+                                    fontSize = 9.5.sp,
                                     fontWeight = FontWeight.Bold
                                 )
                             }
@@ -171,7 +191,7 @@ fun FeedScreen(
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = QawmiDarkGreen)
             )
         },
-        containerColor = Color(0xFFF3F6F3)
+        containerColor = pageBg
     ) { paddingValues ->
         Column(
             modifier = Modifier
@@ -425,7 +445,24 @@ fun FeedScreen(
     viewingCandidate?.let { post ->
         CandidateProfileDialog(
             candidate = post,
-            onDismiss = { viewingCandidate = null }
+            onDismiss = { viewingCandidate = null },
+            onOpenFullProfile = {
+                val target = post.title
+                viewingCandidate = null
+                onViewPublicProfile(target)
+            },
+            onSendMessage = {
+                val conv = ProfileAndInboxRepository.getOrCreateConversationWith(
+                    participantId = "cand_${post.id}",
+                    participantName = "${post.title} (প্রার্থী)",
+                    participantRole = "প্রার্থী",
+                    participantPhone = post.contactPhone,
+                    relatedPostId = post.id,
+                    relatedPostTitle = post.role
+                )
+                viewingCandidate = null
+                onOpenChat(conv)
+            }
         )
     }
 
@@ -449,12 +486,14 @@ fun FilterChipsRow(
     onFilterSelected: (String) -> Unit,
     onDistrictClick: () -> Unit
 ) {
+    val isDark by AppSettingsManager.isDarkMode.collectAsState()
     val filters = listOf("সব পোস্ট", "নিয়োগ বিজ্ঞপ্তি", "আবেদন")
+    val rowBg = if (isDark) Color(0xFF0E2E24) else Color.White
 
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .background(Color.White)
+            .background(rowBg)
             .padding(horizontal = 12.dp, vertical = 8.dp)
             .horizontalScroll(rememberScrollState()),
         horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -531,9 +570,17 @@ fun MadrasahNoticeCard(
 ) {
     val isBookmarked = remember(post.id) { FeedRepository.isBookmarked(post.id) }
     val isApplied = remember(post.id) { FeedRepository.isApplied(post.id) }
+    val isDark by AppSettingsManager.isDarkMode.collectAsState()
 
     LaunchedEffect(post.id) {
         AdminRepository.recordNoticeInteraction(post.id, "view")
+    }
+
+    val cardColor = when {
+        isDark && isBoosted -> Color(0xFF143C2F)
+        isDark -> Color(0xFF0E2E24)
+        isBoosted -> Color(0xFFFFFDF7)
+        else -> QawmiCardBg
     }
 
     Card(
@@ -541,8 +588,8 @@ fun MadrasahNoticeCard(
             .fillMaxWidth()
             .shadow(if (isBoosted) 5.dp else 2.dp, RoundedCornerShape(16.dp)),
         shape = RoundedCornerShape(16.dp),
-        border = if (isBoosted) BorderStroke(1.5.dp, Color(0xFFFFB300)) else null,
-        colors = CardDefaults.cardColors(containerColor = if (isBoosted) Color(0xFFFFFDF7) else QawmiCardBg)
+        border = if (isBoosted) BorderStroke(1.5.dp, Color(0xFFFFB300)) else if (isDark) BorderStroke(1.dp, Color(0xFF1F4E3F)) else null,
+        colors = CardDefaults.cardColors(containerColor = cardColor)
     ) {
         Column(modifier = Modifier.padding(14.dp)) {
             // Header: Badge & Time
@@ -985,7 +1032,9 @@ fun ApplyDialog(
 @Composable
 fun CandidateProfileDialog(
     candidate: FeedItem,
-    onDismiss: () -> Unit
+    onDismiss: () -> Unit,
+    onOpenFullProfile: () -> Unit = {},
+    onSendMessage: () -> Unit = {}
 ) {
     Dialog(onDismissRequest = onDismiss) {
         Card(
@@ -1034,15 +1083,37 @@ fun CandidateProfileDialog(
                     ProfileFieldRow(label = "যোগাযোগ নম্বর:", value = candidate.contactPhone)
                 }
 
-                Spacer(Modifier.height(16.dp))
+                Spacer(Modifier.height(14.dp))
 
-                Button(
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    OutlinedButton(
+                        onClick = onOpenFullProfile,
+                        shape = RoundedCornerShape(20.dp),
+                        border = BorderStroke(1.dp, QawmiDarkGreen),
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Text("পূর্ণ প্রোফাইল", color = QawmiDarkGreen, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                    }
+                    Button(
+                        onClick = onSendMessage,
+                        shape = RoundedCornerShape(20.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = QawmiDarkGreen),
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Text("মেসেজ পাঠান", color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                    }
+                }
+
+                Spacer(Modifier.height(8.dp))
+
+                TextButton(
                     onClick = onDismiss,
-                    shape = RoundedCornerShape(20.dp),
-                    colors = ButtonDefaults.buttonColors(containerColor = QawmiDarkGreen),
                     modifier = Modifier.fillMaxWidth()
                 ) {
-                    Text("বন্ধ করুন", color = Color.White)
+                    Text("বন্ধ করুন", color = Color.Gray)
                 }
             }
         }
