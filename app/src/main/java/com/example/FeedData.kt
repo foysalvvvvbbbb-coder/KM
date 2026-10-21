@@ -173,15 +173,6 @@ object FeedRepository {
                     action = "'${targetPost.title}' (${targetPost.role})-এ আবেদন জমা দেওয়া হয়েছে",
                     category = "Application"
                 )
-                AdminRepository.triggerEventNotification(
-                    title = "আবেদন সফলভাবে গৃহীত হয়েছে",
-                    body = "${targetPost.title}-এর '${targetPost.role}' পদে আপনার আবেদন জমা হয়েছে।",
-                    targetAudience = "খেদমতপ্রার্থী",
-                    targetRoute = "my_applications",
-                    targetItemId = postId,
-                    eventKey = "apply_post_$postId",
-                    category = "Applications"
-                )
             }
         }
     }

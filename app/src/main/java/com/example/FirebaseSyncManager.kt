@@ -192,6 +192,59 @@ object FirebaseSyncManager {
                 }
             activeListeners.add(appsReg)
 
+            // 2.5 User Applications Listener (Real-time sync of user job applications)
+            val userAppsReg = db.collection("user_applications")
+                .addSnapshotListener { snapshot, error ->
+                    if (error != null) {
+                        return@addSnapshotListener
+                    }
+                    if (snapshot != null) {
+                        val currentUid = try { FirebaseAuth.getInstance().currentUser?.uid } catch (_: Exception) { null }
+                        val loaded = snapshot.documents.mapNotNull { doc ->
+                            val id = doc.getString("id") ?: doc.id
+                            val postId = doc.getString("postId") ?: return@mapNotNull null
+                            val applicantUid = doc.getString("applicantUid") ?: ""
+                            val candidateName = doc.getString("applicantName") ?: ""
+                            val roleTitle = doc.getString("roleTitle") ?: ""
+                            val madrasahName = doc.getString("madrasahName") ?: ""
+                            val location = doc.getString("location") ?: "বাংলাদেশ"
+                            val salaryInfo = doc.getString("salaryInfo") ?: "আলোচনা সাপেক্ষ"
+                            val deadline = doc.getString("deadline") ?: "চলমান"
+                            val appliedDate = doc.getString("appliedDate") ?: "আজ"
+                            val appliedAtMillis = doc.getLong("appliedAtMillis") ?: System.currentTimeMillis()
+                            val status = doc.getString("status") ?: "পেন্ডিং"
+                            val notes = doc.getString("notes") ?: ""
+                            UserApplicationRecord(
+                                id = id,
+                                postId = postId,
+                                applicantUid = applicantUid,
+                                applicantName = candidateName,
+                                applicantEmail = doc.getString("applicantEmail") ?: "",
+                                applicantPhone = doc.getString("applicantPhone") ?: "",
+                                applicantQualification = doc.getString("applicantQualification") ?: "",
+                                roleTitle = roleTitle,
+                                madrasahName = madrasahName,
+                                location = location,
+                                salaryInfo = salaryInfo,
+                                deadline = deadline,
+                                appliedDate = appliedDate,
+                                appliedAtMillis = appliedAtMillis,
+                                status = status,
+                                notes = notes
+                            )
+                        }
+                        val myApps = if (!currentUid.isNullOrBlank()) {
+                            loaded.filter { it.applicantUid == currentUid || it.applicantUid.isBlank() }
+                        } else {
+                            loaded
+                        }
+                        if (myApps.isNotEmpty()) {
+                            ProfileAndInboxRepository.updateUserApplicationsFromCloud(myApps)
+                        }
+                    }
+                }
+            activeListeners.add(userAppsReg)
+
             // 3. Madrasahs Listener
             val madrasahsReg = db.collection("madrasahs")
                 .addSnapshotListener { snapshot, error ->
